@@ -1,0 +1,119 @@
+.zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-16) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  background-color: var(--bg-secondary);
+  position: relative;
+}
+
+.zone:hover {
+  border-color: var(--border-hover);
+  background-color: var(--bg-card);
+}
+
+.dragOver {
+  border-color: var(--text-primary);
+  border-style: solid;
+  background-color: var(--bg-card);
+}
+
+.icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all var(--transition-normal);
+}
+
+.zone:hover .icon {
+  color: var(--text-secondary);
+  background-color: var(--bg-active);
+}
+
+.title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  max-width: 400px;
+  line-height: var(--leading-relaxed);
+}
+
+.formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+  justify-content: center;
+  margin-top: var(--space-2);
+}
+
+.format {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background-color: var(--bg-primary);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.fileInput {
+  display: none;
+}
+
+/* Selected file info */
+.selectedFile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-6);
+}
+
+.fileName {
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.fileSize {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.fileActions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Compact mode for transform page */
+.compact {
+  padding: var(--space-8) var(--space-4);
+}
+
+.compact .icon {
+  width: 36px;
+  height: 36px;
+}
+
+.compact .title {
+  font-size: var(--text-base);
+}

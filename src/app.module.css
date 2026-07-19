@@ -1,0 +1,44 @@
+.layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: margin-left var(--transition-normal);
+}
+
+.mainCollapsed {
+  margin-left: var(--sidebar-collapsed);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+@media (max-width: 768px) {
+  .main {
+    margin-left: 0;
+  }
+
+  .mainCollapsed {
+    margin-left: 0;
+  }
+
+  .content {
+    padding-bottom: 56px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1200px) {
+  .main {
+    margin-left: var(--sidebar-collapsed);
+  }
+}

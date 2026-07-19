@@ -1,0 +1,51 @@
+.toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background-color: var(--border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  border: none;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--text-primary);
+  transition: transform var(--transition-fast);
+}
+
+.active {
+  background-color: var(--text-primary);
+}
+
+.active::after {
+  transform: translateX(16px);
+  background-color: var(--bg-primary);
+}
+
+.wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.label {
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.description {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-top: var(--space-0-5);
+}

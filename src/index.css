@@ -1,0 +1,375 @@
+/* ═══════════════════════════════════════════════════════════
+   OmniParse IDP — Design System
+   ═══════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap');
+
+/* ── Design Tokens ──────────────────────────────────────── */
+
+:root {
+  /* Backgrounds */
+  --bg-primary: #09090B;
+  --bg-secondary: #111113;
+  --bg-card: #151518;
+  --bg-hover: #1a1a1e;
+  --bg-active: #1f1f23;
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Borders */
+  --border: #27272A;
+  --border-hover: #3f3f46;
+  --border-active: #52525b;
+
+  /* Text */
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-muted: #71717A;
+  --text-disabled: #52525b;
+
+  /* Status */
+  --status-success: #22c55e;
+  --status-error: #ef4444;
+  --status-warning: #f59e0b;
+  --status-info: #3b82f6;
+  --status-processing: #8b5cf6;
+
+  /* Typography */
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', 'Cascadia Code', monospace;
+
+  /* Font Sizes */
+  --text-xs: 0.6875rem;    /* 11px */
+  --text-sm: 0.8125rem;    /* 13px */
+  --text-base: 0.875rem;   /* 14px */
+  --text-md: 0.9375rem;    /* 15px */
+  --text-lg: 1.125rem;     /* 18px */
+  --text-xl: 1.25rem;      /* 20px */
+  --text-2xl: 1.5rem;      /* 24px */
+  --text-3xl: 2rem;        /* 32px */
+  --text-4xl: 2.5rem;      /* 40px */
+
+  /* Line Heights */
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  /* Font Weights */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing (4px base) */
+  --space-0: 0;
+  --space-px: 1px;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.55);
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --sidebar-collapsed: 60px;
+  --topbar-height: 52px;
+  --content-max-width: 1400px;
+
+  /* Z-Index */
+  --z-sidebar: 40;
+  --z-topbar: 30;
+  --z-dropdown: 50;
+  --z-dialog: 60;
+  --z-command-palette: 70;
+  --z-toast: 80;
+}
+
+/* ── Light Theme Tokens (Crisp Off-White & Deep Slate #0F172A) ──── */
+html[data-theme="light"] {
+  /* Backgrounds */
+  --bg-primary: #F8FAFC;       /* Crisp off-white canvas */
+  --bg-secondary: #FFFFFF;     /* Pure white container / sidebar / topbar */
+  --bg-card: #FFFFFF;          /* Pure card surface */
+  --bg-hover: #F1F5F9;         /* Slate hover */
+  --bg-active: #E2E8F0;        /* Active state */
+  --bg-overlay: rgba(15, 23, 42, 0.4);
+
+  /* Borders */
+  --border: #E2E8F0;          /* Subtle slate border */
+  --border-hover: #CBD5E1;    /* Slate 300 hover border */
+  --border-active: #0F172A;   /* Deep Slate active border */
+
+  /* Text */
+  --text-primary: #0F172A;     /* Deep Slate primary typography */
+  --text-secondary: #334155;   /* Slate 700 secondary text */
+  --text-muted: #64748B;       /* Slate 500 muted text */
+  --text-disabled: #94A3B8;    /* Slate 400 disabled */
+
+  /* Status */
+  --status-success: #16a34a;
+  --status-error: #dc2626;
+  --status-warning: #d97706;
+  --status-info: #2563eb;
+  --status-processing: #7c3aed;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.12);
+  --shadow-overlay: 0 16px 48px rgba(15, 23, 42, 0.2);
+}
+
+
+
+/* ── Reset ──────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-size: 16px;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--border-hover);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+
+/* ── Selection ──────────────────────────────────────────── */
+
+::selection {
+  background-color: rgba(250, 250, 250, 0.12);
+  color: var(--text-primary);
+}
+
+
+/* ── Focus ──────────────────────────────────────────────── */
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--border-hover);
+  border-radius: var(--radius-sm);
+}
+
+
+/* ── Typography ─────────────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+h1 { font-size: var(--text-3xl); }
+h2 { font-size: var(--text-2xl); }
+h3 { font-size: var(--text-xl); }
+h4 { font-size: var(--text-lg); }
+h5 { font-size: var(--text-md); }
+h6 { font-size: var(--text-base); }
+
+p {
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+code, pre {
+  font-family: var(--font-mono);
+}
+
+small {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+
+/* ── Utility Classes ────────────────────────────────────── */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.no-select {
+  user-select: none;
+}
+
+
+/* ── Animations ─────────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.animate-fade-in    { animation: fadeIn var(--transition-normal) forwards; }
+.animate-slide-up   { animation: slideUp var(--transition-normal) forwards; }
+.animate-slide-down { animation: slideDown var(--transition-normal) forwards; }
+.animate-scale-in   { animation: scaleIn var(--transition-normal) forwards; }
+.animate-pulse      { animation: pulse 2s ease-in-out infinite; }
