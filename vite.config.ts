@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    watch: {
+      ignored: ['**/venv/**', '**/hf_space/**', '**/dist/**'],
+    },
     proxy: {
       '/api/v1/extract': {
         target: 'http://localhost:7860',
@@ -12,5 +15,9 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  optimizeDeps: {
+    // Restrict Vite scanner strictly to the src directory (ignores python venv)
+    entries: ['src/**/*.{ts,tsx,js,jsx}'],
   },
 })
