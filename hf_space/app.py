@@ -5,7 +5,7 @@ from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import gradio as gr
-from transformers import AutoProcessor, AutoModelForConditionalGeneration, AutoModel
+from transformers import AutoProcessor, AutoModel
 
 # 1. Optimize PyTorch CPU Threading
 cpu_cores = os.cpu_count() or 4
@@ -32,21 +32,12 @@ MODEL_ID = "PaddlePaddle/PaddleOCR-VL-1.6"
 
 print(f"Loading model and processor (CPU cores: {cpu_cores})...")
 processor = AutoProcessor.from_pretrained(MODEL_ID, trust_remote_code=True)
-
-try:
-    model = AutoModelForConditionalGeneration.from_pretrained(
-        MODEL_ID,
-        torch_dtype=torch.float32,
-        low_cpu_mem_usage=True,
-        trust_remote_code=True
-    )
-except Exception:
-    model = AutoModel.from_pretrained(
-        MODEL_ID,
-        torch_dtype=torch.float32,
-        low_cpu_mem_usage=True,
-        trust_remote_code=True
-    )
+model = AutoModel.from_pretrained(
+    MODEL_ID,
+    torch_dtype=torch.float32,
+    low_cpu_mem_usage=True,
+    trust_remote_code=True
+)
 
 model.eval()
 print("Model loaded successfully.")
