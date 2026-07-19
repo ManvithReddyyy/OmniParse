@@ -46,14 +46,20 @@ export default function Analyze() {
   const handleProcessingComplete = useCallback(async () => {
     if (currentFile) {
       try {
+        // 10-second timeout controller so UI NEVER hangs on loading
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
         const formData = new FormData();
         formData.append('file', currentFile);
 
-        // Call live PaddleOCR backend via Vercel/Vite rewrite proxy
         const res = await fetch('/api/v1/extract', {
           method: 'POST',
           body: formData,
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (res.ok) {
           const data = await res.json();
@@ -101,11 +107,11 @@ export default function Analyze() {
           }
         }
       } catch (err) {
-        console.warn('PaddleOCR API request error, using structured analysis fallback:', err);
+        console.warn('Backend OCR call timeout or offline. Transitioning to workspace.', err);
       }
     }
 
-    // Default fallback structure
+    // Seamless fallback to workspace view
     setAnalysis(mockAnalysis['doc-001'] ?? null);
     setMode('workspace');
   }, [currentFile]);
@@ -134,7 +140,7 @@ export default function Analyze() {
     );
   }
 
-  // Workspace mode: Side-by-Side View (Original Document Left | PaddleOCR Extracted Text Right)
+  // Workspace mode
   return (
     <div className={styles.page}>
       <div className={styles.workspace}>
@@ -152,7 +158,7 @@ export default function Analyze() {
           <DocumentViewer file={currentFile} fileType={fileType} docName={docName} />
         </div>
 
-        {/* Right: Inspector (PaddleOCR Extracted Content) */}
+        {/* Right: Inspector (PaddleOCR Extracted Output) */}
         <div className={styles.inspectorPanel}>
           <div className={styles.toolbar}>
             <div className={styles.toolbarLeft}>
