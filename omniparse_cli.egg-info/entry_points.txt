@@ -1,0 +1,2 @@
+[console_scripts]
+omniparse = omniparse:main

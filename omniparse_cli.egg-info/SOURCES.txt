@@ -1,0 +1,10 @@
+README.md
+omniparse.py
+pyproject.toml
+setup.py
+omniparse_cli.egg-info/PKG-INFO
+omniparse_cli.egg-info/SOURCES.txt
+omniparse_cli.egg-info/dependency_links.txt
+omniparse_cli.egg-info/entry_points.txt
+omniparse_cli.egg-info/requires.txt
+omniparse_cli.egg-info/top_level.txt

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omniparse-cli"
+version = "0.1.0-beta.1"
+description = "Universal Document Analysis & Multilingual OCR CLI (Tesseract-compatible interface)"
+readme = "README.md"
+authors = [
+    { name = "Manvith Reddy", email = "23b81a05lv@cvr.ac.in" }
+]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+dependencies = [
+    "requests>=2.28.0"
+]
+
+[project.scripts]
+omniparse = "omniparse:main"
+
+[tool.setuptools]
+py-modules = ["omniparse"]

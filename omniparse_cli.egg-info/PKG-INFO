@@ -1,0 +1,68 @@
+Metadata-Version: 2.4
+Name: omniparse-cli
+Version: 0.1.0b1
+Summary: Universal Document Analysis & Multilingual OCR CLI (Tesseract-compatible interface)
+Author-email: Manvith Reddy <23b81a05lv@cvr.ac.in>
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Scientific/Engineering :: Image Recognition
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.28.0
+
+# OmniParse IDP — Universal Document Analysis & Multilingual OCR Platform
+
+OmniParse is an Intelligent Document Processing (IDP) platform powered by **PaddleOCR v3.7**, **PyMuPDF**, **Office COM Rendering**, and **Deep Translator**.
+
+---
+
+## 💻 OmniParse CLI (Tesseract-compatible Command Line Tool)
+
+You can run OmniParse document OCR and translation directly from the terminal using Tesseract-style commands:
+
+### Basic Commands:
+```bash
+# 1. Output OCR text directly to terminal (stdout)
+python omniparse.py input.png stdout -l eng
+
+# 2. Extract OCR from PDF/PPTX/DOCX into a text file
+python omniparse.py presentation.pptx output.txt -l japan
+
+# 3. Extract text in Japanese and translate automatically to English
+python omniparse.py document.pdf output.md -l japan --translate en --format markdown
+
+# 4. Extract OCR text and save as structured JSON
+python omniparse.py invoice.png output.json -f json -l german
+
+# 5. List supported OCR & Translation languages
+python omniparse.py --list-langs
+```
+
+### Windows CMD Shortcut:
+```cmd
+omniparse document.pdf stdout -l eng
+omniparse slide.pptx output.md -l jpn -t en -f md
+```
+
+---
+
+## 🌐 Supported Languages
+- **English** (`eng` / `en`)
+- **Japanese** (`jpn` / `japan`)
+- **German** (`ger` / `german`)
+- **French** (`fre` / `french`)
+- **Spanish** (`spa` / `es`)
+- **Chinese** (`chi` / `ch`)
+- **Hindi** (`hin` / `hi`)
+
+---
+
+## 🚀 Running Local Web Server
+```bash
+# Backend (FastAPI + PaddleOCR + Translation)
+python -m uvicorn app:app --host 0.0.0.0 --port 7860
+
+# Frontend (Vite + React)
+npm run dev
+```
