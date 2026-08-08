@@ -4,18 +4,12 @@ OmniParse is an Intelligent Document Processing (IDP) platform powered by **Padd
 
 ---
 
-## ⚡ Quick 1-Line Terminal Installation (Beta)
+## ⚡ Quick Terminal Installation (Official Beta)
 
-Anyone can install `omniparse` directly in their terminal with a single command:
+Anyone can install `omniparse` globally in their terminal with a single command:
 
-### Option 1: Via Pip (Cross-platform)
 ```bash
-pip install git+https://github.com/ManvithReddyyy/OmniParse.git
-```
-
-### Option 2: Windows PowerShell
-```powershell
-iwr -useb https://raw.githubusercontent.com/ManvithReddyyy/OmniParse/main/install.ps1 | iex
+pip install omniparse-cli
 ```
 
 ### Option 3: Linux / macOS Terminal

@@ -10,6 +10,7 @@ Classifier: Operating System :: OS Independent
 Classifier: Topic :: Scientific/Engineering :: Image Recognition
 Description-Content-Type: text/markdown
 Requires-Dist: requests>=2.28.0
+Requires-Dist: rich>=13.0.0
 
 # OmniParse IDP — Universal Document Analysis & Multilingual OCR Platform
 
@@ -17,32 +18,46 @@ OmniParse is an Intelligent Document Processing (IDP) platform powered by **Padd
 
 ---
 
-## 💻 OmniParse CLI (Tesseract-compatible Command Line Tool)
+## ⚡ Quick 1-Line Terminal Installation (Beta)
 
-You can run OmniParse document OCR and translation directly from the terminal using Tesseract-style commands:
+Anyone can install `omniparse` directly in their terminal with a single command:
 
-### Basic Commands:
+### Option 1: Via Pip (Cross-platform)
 ```bash
-# 1. Output OCR text directly to terminal (stdout)
-python omniparse.py input.png stdout -l eng
-
-# 2. Extract OCR from PDF/PPTX/DOCX into a text file
-python omniparse.py presentation.pptx output.txt -l japan
-
-# 3. Extract text in Japanese and translate automatically to English
-python omniparse.py document.pdf output.md -l japan --translate en --format markdown
-
-# 4. Extract OCR text and save as structured JSON
-python omniparse.py invoice.png output.json -f json -l german
-
-# 5. List supported OCR & Translation languages
-python omniparse.py --list-langs
+pip install git+https://github.com/ManvithReddyyy/OmniParse.git
 ```
 
-### Windows CMD Shortcut:
-```cmd
-omniparse document.pdf stdout -l eng
-omniparse slide.pptx output.md -l jpn -t en -f md
+### Option 2: Windows PowerShell
+```powershell
+iwr -useb https://raw.githubusercontent.com/ManvithReddyyy/OmniParse/main/install.ps1 | iex
+```
+
+### Option 3: Linux / macOS Terminal
+```bash
+curl -fsSL https://raw.githubusercontent.com/ManvithReddyyy/OmniParse/main/install.sh | sh
+```
+
+---
+
+## 💻 Terminal Commands (Tesseract-compatible interface)
+
+Once installed, run `omniparse` from any folder or terminal:
+
+```bash
+# 1. Output OCR text directly to terminal (stdout)
+omniparse input.png stdout -l eng
+
+# 2. Extract OCR from PDF/PPTX/DOCX into a text file
+omniparse presentation.pptx output.txt -l japan
+
+# 3. Extract text in Japanese and translate automatically to English
+omniparse document.pdf output.md -l japan --translate en --format markdown
+
+# 4. Extract OCR text and save as structured JSON
+omniparse invoice.png output.json -f json -l german
+
+# 5. List all supported OCR & Translation languages
+omniparse --list-langs
 ```
 
 ---
@@ -58,7 +73,7 @@ omniparse slide.pptx output.md -l jpn -t en -f md
 
 ---
 
-## 🚀 Running Local Web Server
+## 🚀 Running Local Web Application
 ```bash
 # Backend (FastAPI + PaddleOCR + Translation)
 python -m uvicorn app:app --host 0.0.0.0 --port 7860
