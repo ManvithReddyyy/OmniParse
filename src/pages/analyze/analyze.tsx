@@ -1,3 +1,4 @@
+import { useAuth } from '../../context/auth-context';
 import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { FileText } from 'lucide-react';
@@ -22,6 +23,7 @@ import styles from './analyze.module.css';
 type Mode = 'upload' | 'processing' | 'workspace';
 
 export default function Analyze() {
+  const { token } = useAuth();
   const [searchParams] = useSearchParams();
   const { state, addDocument, setActiveDocument } = useApp();
   const [mode, setMode] = useState<Mode>('upload');
@@ -135,10 +137,13 @@ export default function Analyze() {
         console.log(`[OmniParse] Sending ${currentFile.name} to PaddleOCR backend (lang: '${ocrLanguage}')...`);
 
         const res = await fetch('/api/v1/extract', {
-          method: 'POST',
-          body: formData,
-          signal: controller.signal,
-        });
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${token}`,
+  },
+  body: formData,
+  signal: controller.signal,
+});
 
         clearTimeout(timeoutId);
 

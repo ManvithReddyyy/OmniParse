@@ -158,6 +158,55 @@ def create_access_token(user_id: int) -> str:
         SECRET_KEY,
         algorithm=ALGORITHM
     )
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("sub")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authentication token"
+            )
+
+        conn = get_db()
+
+        user = conn.execute(
+            "SELECT id, name, email FROM users WHERE id = ?",
+            (int(user_id),)
+        ).fetchone()
+
+        conn.close()
+
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="User not found"
+            )
+
+        return user
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired"
+        )
+
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token"
+        )
 # ── Signup ──────────────────────────────────────────────────
 
 class SignupRequest(BaseModel):
@@ -763,7 +812,8 @@ def extract_image(file_bytes: bytes, filename: str, lang: str = "en"):
 async def analyze_document(
     file: UploadFile = File(...),
     ocr_lang: str = Form("en"),
-    translate_to: str = Form(None)
+    translate_to: str = Form(None),
+    current_user = Depends(get_current_user)
 ):
     """
     Multilingual document & image extraction endpoint powered by PaddleOCR (EN, JP, DE, FR, ES, CH, HI).
@@ -856,7 +906,10 @@ class TranslationRequest(BaseModel):
 
 
 @app.post("/v1/vision/translate")
-async def translate_text_endpoint(req: TranslationRequest):
+async def translate_text_endpoint(
+    req: TranslationRequest,
+    current_user = Depends(get_current_user)
+):
     """
     Standalone text line translation endpoint using Deep Translator (Google Translate engine).
     Supports translating to English ('en'), German ('de'), Japanese ('ja'), French ('fr'), Spanish ('es'), Chinese ('zh-CN'), etc.
