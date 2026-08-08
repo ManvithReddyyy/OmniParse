@@ -1,5 +1,7 @@
 """
-OmniParse Backend — Unified document & image text/media extraction using PaddleOCR (Multilingual: EN, DE, JP, FR, ES, CH, HI) & PyMuPDF + Office COM slide rendering & Translation.
+OmniParse Backend — Unified document & image text/media extraction using
+PaddleOCR (Multilingual: EN, DE, JP, FR, ES, CH, HI) & PyMuPDF +
+Office COM slide rendering & Translation.
 """
 
 import base64
@@ -8,11 +10,28 @@ import os
 import tempfile
 import traceback
 import zipfile
+import sqlite3
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
 
+import jwt
 import fitz  # PyMuPDF
+
 from PIL import Image
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+
+from fastapi import (
+    FastAPI,
+    File,
+    UploadFile,
+    Form,
+    HTTPException,
+    Depends,
+)
+
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from pptx import Presentation
 from docx import Document as DocxDocument
 from pydantic import BaseModel
@@ -33,6 +52,7 @@ app = FastAPI(
     description="Universal document text, media & slide page image rendering backend powered by PaddleOCR & Deep Translator",
 )
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -40,6 +60,307 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Authentication ──────────────────────────────────────────
+
+AUTH_DB = "auth.db"
+
+SECRET_KEY = os.getenv(
+    "OMNIPARSE_SECRET_KEY",
+    "omniparse-development-secret-change-this"
+)
+
+ALGORITHM = "HS256"
+TOKEN_EXPIRE_DAYS = 7
+
+security = HTTPBearer()
+
+
+def get_db():
+    conn = sqlite3.connect(AUTH_DB)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_auth_db():
+    conn = get_db()
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+init_auth_db()
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        100_000
+    )
+
+    return f"{salt.hex()}:{password_hash.hex()}"
+
+
+def verify_password(
+    password: str,
+    stored_password: str
+) -> bool:
+
+    try:
+        salt_hex, hash_hex = stored_password.split(":")
+
+        salt = bytes.fromhex(salt_hex)
+
+        password_hash = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            100_000
+        )
+
+        return secrets.compare_digest(
+            password_hash.hex(),
+            hash_hex
+        )
+
+    except Exception:
+        return False
+
+
+def create_access_token(user_id: int) -> str:
+
+    expires = (
+        datetime.now(timezone.utc)
+        + timedelta(days=TOKEN_EXPIRE_DAYS)
+    )
+
+    payload = {
+        "sub": str(user_id),
+        "exp": expires
+    }
+
+    return jwt.encode(
+        payload,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
+# ── Signup ──────────────────────────────────────────────────
+
+class SignupRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+@app.post("/auth/signup")
+async def signup(request: SignupRequest):
+
+    name = request.name.strip()
+    email = request.email.strip().lower()
+    password = request.password
+
+    # Validate name
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Name is required"
+        )
+
+    # Validate email
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Email is required"
+        )
+
+    # Validate password
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters"
+        )
+
+    # Connect to database
+    conn = get_db()
+
+    # Check whether email already exists
+    existing_user = conn.execute(
+        "SELECT id FROM users WHERE email = ?",
+        (email,)
+    ).fetchone()
+
+    if existing_user:
+        conn.close()
+
+        raise HTTPException(
+            status_code=409,
+            detail="Email already registered"
+        )
+
+    # Hash password
+    password_hash = hash_password(password)
+
+    # Create user
+    cursor = conn.execute(
+        """
+        INSERT INTO users
+        (name, email, password_hash, created_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            name,
+            email,
+            password_hash,
+            datetime.now(timezone.utc).isoformat()
+        )
+    )
+
+    conn.commit()
+
+    user_id = cursor.lastrowid
+
+    conn.close()
+
+    return {
+        "message": "Account created successfully",
+        "user": {
+            "id": user_id,
+            "name": name,
+            "email": email
+        }
+    }
+# ── Login ───────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/auth/login")
+async def login(request: LoginRequest):
+
+    email = request.email.strip().lower()
+
+    conn = get_db()
+
+    user = conn.execute(
+        """
+        SELECT id, name, email, password_hash
+        FROM users
+        WHERE email = ?
+        """,
+        (email,)
+    ).fetchone()
+
+    conn.close()
+
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
+
+    if not verify_password(
+        request.password,
+        user["password_hash"]
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
+
+    token = create_access_token(user["id"])
+
+    return {
+        "message": "Login successful",
+        "token": token,
+        "user": {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user["email"]
+        }
+    }
+# ── Current User ────────────────────────────────────────────
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("sub")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authentication token"
+            )
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication token expired"
+        )
+
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token"
+        )
+
+    conn = get_db()
+
+    user = conn.execute(
+        """
+        SELECT id, name, email
+        FROM users
+        WHERE id = ?
+        """,
+        (int(user_id),)
+    ).fetchone()
+
+    conn.close()
+
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
+
+    return {
+        "id": user["id"],
+        "name": user["name"],
+        "email": user["email"]
+    }
+
+
+@app.get("/auth/me")
+async def get_me(
+    current_user=Depends(get_current_user)
+):
+    return {
+        "user": current_user
+    }
 
 # ── Multilingual PaddleOCR Engine Cache ──────────────────────
 _ocr_engines: dict[str, object] = {}
