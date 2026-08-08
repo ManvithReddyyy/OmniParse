@@ -9,6 +9,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useApp } from '../../context/app-context';
+import { useAuth } from '../../context/auth-context';
 import {
   supportedFormats,
   formatRelativeDate,
@@ -36,6 +37,7 @@ const fileIcons: Record<string, React.ElementType> = {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { state } = useApp();
+  const { user } = useAuth();
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
 
   const today = new Date().toLocaleDateString('en-US', {
@@ -107,8 +109,12 @@ export default function Dashboard() {
       {/* Header */}
       <div className={styles.header}>
         <h1 className={styles.greeting}>
-          <Typewriter text={`Welcome back, ${state.settings.displayName}`} speed={40} delay={150} />
-        </h1>
+        <Typewriter
+        text={`Welcome back, ${user?.name || 'User'}`}
+        speed={40}
+        delay={150}
+        />       
+         </h1>
         <p className={styles.date}>
           <Typewriter
             key={subtitle}
