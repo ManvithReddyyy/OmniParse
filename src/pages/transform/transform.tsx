@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { ArrowRight, Copy, Download, Sparkles } from 'lucide-react';
-import {
-  mockDocuments,
-  mockTransforms,
-  type OutputFormat,
-} from '../../data/mock';
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Copy, Download, Sparkles, Upload, FileText } from 'lucide-react';
+import { type OutputFormat } from '../../data/mock';
+import { useApp } from '../../context/app-context';
 import Select from '../../components/ui/select';
 import Button from '../../components/ui/button';
 import { useToast } from '../../context/toast-context';
@@ -23,13 +21,16 @@ const formatExtensions: Record<OutputFormat, string> = {
 };
 
 export default function Transform() {
-  const completedDocs = mockDocuments.filter((d) => d.status === 'completed');
+  const navigate = useNavigate();
+  const { state } = useApp();
+  const completedDocs = state.documents.filter((d) => d.status === 'completed');
   const [selectedDocId, setSelectedDocId] = useState(completedDocs[0]?.id ?? '');
   const [format, setFormat] = useState<OutputFormat>('markdown');
   const { addToast } = useToast();
 
-  const transform = mockTransforms[selectedDocId];
-  const selectedDoc = completedDocs.find((d) => d.id === selectedDocId);
+  const activeId = selectedDocId || completedDocs[0]?.id || '';
+  const transform = state.transformStore[activeId];
+  const selectedDoc = completedDocs.find((d) => d.id === activeId);
 
   const getOutput = () => {
     if (!transform) return '';
@@ -43,7 +44,7 @@ export default function Transform() {
     return transform.plaintextTokens;
   };
 
-  const savings = transform
+  const savings = transform && transform.originalTokens > 0
     ? Math.round(((transform.originalTokens - getTokens()) / transform.originalTokens) * 100)
     : 0;
 
@@ -64,6 +65,43 @@ export default function Transform() {
     addToast('File downloaded', 'success');
   };
 
+  if (completedDocs.length === 0) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.header}>
+          <h1 className={styles.title}>Transform</h1>
+          <p className={styles.subtitle}>
+            Convert analyzed documents into AI-ready structured formats. Choose your output format and download the result.
+          </p>
+        </div>
+
+        <div
+          style={{
+            padding: '48px 24px',
+            textAlign: 'center',
+            backgroundColor: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            maxWidth: '560px',
+            margin: '40px auto 0 auto',
+          }}
+        >
+          <FileText size={40} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+          <h3 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+            No documents available for transformation
+          </h3>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: '24px' }}>
+            Upload and analyze a document first to convert it into Markdown, JSON, or Plain Text.
+          </p>
+          <Button variant="primary" size="lg" onClick={() => navigate('/analyze')}>
+            <Upload size={16} />
+            Analyze a Document
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -78,7 +116,7 @@ export default function Transform() {
         <Select
           label="Document"
           options={completedDocs.map((d) => ({ value: d.id, label: d.filename }))}
-          value={selectedDocId}
+          value={activeId}
           onChange={(e) => setSelectedDocId(e.target.value)}
           className={styles.docSelect}
         />

@@ -1,6 +1,6 @@
 import { useState, useRef, type DragEvent } from 'react';
-import { Upload, File, X } from 'lucide-react';
-import Button from '../ui/button';
+import { Upload } from 'lucide-react';
+import { UploadCard } from '@/components/ui/upload-ui';
 import { formatFileSize } from '../../data/mock';
 import styles from './upload-zone.module.css';
 
@@ -24,6 +24,8 @@ interface UploadZoneProps {
 export default function UploadZone({ onFileSelect, compact, className = '' }: UploadZoneProps) {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [progress, setProgress] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: DragEvent) => {
@@ -36,19 +38,36 @@ export default function UploadZone({ onFileSelect, compact, className = '' }: Up
     setDragOver(false);
   };
 
+  const processFile = (file: File) => {
+    setSelectedFile(file);
+    setUploadState('uploading');
+    setProgress(25);
+
+    const interval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 90) {
+          clearInterval(interval);
+          setUploadState('success');
+          return 100;
+        }
+        return prev + 25;
+      });
+    }, 200);
+  };
+
   const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (file && isValidFile(file)) {
-      setSelectedFile(file);
+      processFile(file);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setSelectedFile(file);
+      processFile(file);
     }
   };
 
@@ -65,29 +84,29 @@ export default function UploadZone({ onFileSelect, compact, className = '' }: Up
 
   const clearFile = () => {
     setSelectedFile(null);
+    setUploadState('idle');
+    setProgress(0);
     if (inputRef.current) inputRef.current.value = '';
   };
 
-  if (selectedFile) {
+  if (selectedFile && uploadState !== 'idle') {
     return (
-      <div className={`${styles.zone} ${compact ? styles.compact : ''} ${className}`}>
-        <div className={styles.selectedFile}>
-          <div className={styles.icon}>
-            <File size={compact ? 18 : 24} strokeWidth={1.5} />
-          </div>
-          <div className={styles.fileName}>{selectedFile.name}</div>
-          <div className={styles.fileSize}>{formatFileSize(selectedFile.size)}</div>
-          <div className={styles.fileActions}>
-            <Button variant="ghost" size="sm" onClick={clearFile}>
-              <X size={14} />
-              Remove
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleProcess}>
-              <Upload size={14} />
-              Process Document
-            </Button>
-          </div>
-        </div>
+      <div className={`${styles.zone} ${compact ? styles.compact : ''} ${className}`} style={{ border: 'none', background: 'transparent', padding: 0, display: 'flex', justifyContent: 'center' }}>
+        <UploadCard
+          status={uploadState === 'uploading' ? 'uploading' : uploadState === 'success' ? 'success' : 'error'}
+          progress={progress}
+          title={uploadState === 'uploading' ? 'Just a minute...' : 'Your file was uploaded!'}
+          description={
+            uploadState === 'uploading'
+              ? 'Your file is uploading right now. Just give us a second to finish your upload.'
+              : `Successfully uploaded ${selectedFile.name} (${formatFileSize(selectedFile.size)}). Ready for OCR extraction.`
+          }
+          primaryButtonText={uploadState === 'uploading' ? 'Cancel' : 'Process Document'}
+          onPrimaryButtonClick={uploadState === 'uploading' ? clearFile : handleProcess}
+          secondaryButtonText={uploadState !== 'uploading' ? 'Remove' : undefined}
+          onSecondaryButtonClick={uploadState !== 'uploading' ? clearFile : undefined}
+          onClose={clearFile}
+        />
       </div>
     );
   }

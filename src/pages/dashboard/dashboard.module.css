@@ -136,6 +136,25 @@
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+.formatChip:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.formatChipActive {
+  background-color: rgba(99, 102, 241, 0.15);
+  border-color: #6366f1;
+  box-shadow: 0 0 0 1px #6366f1, 0 4px 12px rgba(99, 102, 241, 0.15);
+
+  .formatExt {
+    color: #818cf8;
+  }
 }
 
 .formatExt {
@@ -148,6 +167,32 @@
 .formatDesc {
   color: var(--text-muted);
   font-size: var(--text-xs);
+}
+
+.filterBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: #818cf8;
+  background-color: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.filterBadge:hover {
+  background-color: rgba(99, 102, 241, 0.25);
+  border-color: #818cf8;
+}
+
+.filterClear {
+  opacity: 0.8;
+  font-size: 10px;
 }
 
 @keyframes fadeIn {

@@ -1,32 +1,55 @@
-# React + TypeScript + Vite
+# OmniParse IDP — Universal Document Analysis & Multilingual OCR Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+OmniParse is an Intelligent Document Processing (IDP) platform powered by **PaddleOCR v3.7**, **PyMuPDF**, **Office COM Rendering**, and **Deep Translator**.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 💻 OmniParse CLI (Tesseract-compatible Command Line Tool)
 
-## React Compiler
+You can run OmniParse document OCR and translation directly from the terminal using Tesseract-style commands:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Basic Commands:
+```bash
+# 1. Output OCR text directly to terminal (stdout)
+python omniparse.py input.png stdout -l eng
 
-## Expanding the Oxlint configuration
+# 2. Extract OCR from PDF/PPTX/DOCX into a text file
+python omniparse.py presentation.pptx output.txt -l japan
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+# 3. Extract text in Japanese and translate automatically to English
+python omniparse.py document.pdf output.md -l japan --translate en --format markdown
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+# 4. Extract OCR text and save as structured JSON
+python omniparse.py invoice.png output.json -f json -l german
+
+# 5. List supported OCR & Translation languages
+python omniparse.py --list-langs
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+### Windows CMD Shortcut:
+```cmd
+omniparse document.pdf stdout -l eng
+omniparse slide.pptx output.md -l jpn -t en -f md
+```
+
+---
+
+## 🌐 Supported Languages
+- **English** (`eng` / `en`)
+- **Japanese** (`jpn` / `japan`)
+- **German** (`ger` / `german`)
+- **French** (`fre` / `french`)
+- **Spanish** (`spa` / `es`)
+- **Chinese** (`chi` / `ch`)
+- **Hindi** (`hin` / `hi`)
+
+---
+
+## 🚀 Running Local Web Server
+```bash
+# Backend (FastAPI + PaddleOCR + Translation)
+python -m uvicorn app:app --host 0.0.0.0 --port 7860
+
+# Frontend (Vite + React)
+npm run dev
+```
