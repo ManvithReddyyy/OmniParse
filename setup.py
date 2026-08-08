@@ -6,6 +6,7 @@ setup(
     py_modules=["omniparse"],
     install_requires=[
         "requests>=2.28.0",
+        "rich>=13.0.0",
     ],
     entry_points={
         "console_scripts": [
