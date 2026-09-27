@@ -25,6 +25,7 @@
 }
 
 .crumbCurrent {
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
   pointer-events: none;
 }

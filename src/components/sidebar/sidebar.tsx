@@ -7,14 +7,16 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Hexagon,
+  Key,
 } from 'lucide-react';
 import { useApp } from '../../context/app-context';
 import styles from './sidebar.module.css';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/analyze', label: 'Analyze', icon: Search },
-  { path: '/transform', label: 'Transform', icon: ArrowRightLeft },
+  { path: '/analyze', label: 'Document Analyzer', icon: Search },
+  { path: '/transform', label: 'Transform & Export', icon: ArrowRightLeft },
+  { path: '/api-keys', label: 'API Keys & Docs', icon: Key },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -30,16 +32,22 @@ export default function Sidebar() {
           <div className={styles.brandIcon}>
             <Hexagon size={16} strokeWidth={2.5} />
           </div>
-          <span className={styles.brandName}>OmniParse</span>
+          {!state.sidebarCollapsed && (
+            <div className={styles.brandInfo}>
+              <span className={styles.brandName}>OmniParse</span>
+              <span className={styles.brandTag}>IDP v2.3</span>
+            </div>
+          )}
         </div>
 
         <nav className={styles.nav}>
-          <div className={styles.navSection}>Navigation</div>
+          {!state.sidebarCollapsed && <div className={styles.navSection}>WORKSPACE</div>}
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = item.path === '/'
-              ? location.pathname === '/'
-              : location.pathname.startsWith(item.path);
+            const isActive =
+              item.path === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(item.path);
 
             return (
               <NavLink
@@ -49,14 +57,31 @@ export default function Sidebar() {
                 title={state.sidebarCollapsed ? item.label : undefined}
               >
                 <Icon size={18} strokeWidth={1.8} className={styles.navItemIcon} />
-                <span className={styles.navItemLabel}>{item.label}</span>
+                {!state.sidebarCollapsed && (
+                  <span className={styles.navItemLabel}>{item.label}</span>
+                )}
               </NavLink>
             );
           })}
         </nav>
 
+        {/* Engine Status Widget */}
+        {!state.sidebarCollapsed && (
+          <div className={styles.statusWidget}>
+            <div className={styles.statusHeader}>
+              <span className={styles.statusPulse} />
+              <span>OmniParse Engine</span>
+            </div>
+            <div className={styles.statusSub}>Online</div>
+          </div>
+        )}
+
         <div className={styles.bottom}>
-          <button className={styles.collapseBtn} onClick={toggleSidebar} title="Toggle sidebar">
+          <button
+            className={styles.collapseBtn}
+            onClick={toggleSidebar}
+            title={state.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
             {state.sidebarCollapsed ? (
               <ChevronsRight size={18} strokeWidth={1.8} />
             ) : (
@@ -73,9 +98,10 @@ export default function Sidebar() {
       <nav className={styles.bottomNav}>
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = item.path === '/'
-            ? location.pathname === '/'
-            : location.pathname.startsWith(item.path);
+          const isActive =
+            item.path === '/'
+              ? location.pathname === '/'
+              : location.pathname.startsWith(item.path);
 
           return (
             <NavLink
@@ -83,7 +109,7 @@ export default function Sidebar() {
               to={item.path}
               className={`${styles.bottomNavItem} ${isActive ? styles.bottomNavItemActive : ''}`}
             >
-              <Icon size={20} strokeWidth={1.8} />
+              <Icon size={18} strokeWidth={1.8} />
               <span>{item.label}</span>
             </NavLink>
           );

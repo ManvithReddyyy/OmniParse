@@ -1,351 +1,365 @@
 import { useState } from 'react';
-import { Bell, MessageSquare, BellOff, Shield, Key, Copy, Check } from 'lucide-react';
+import {
+  Cpu,
+  Key,
+  User,
+  Copy,
+  Check,
+  RefreshCw,
+  Activity,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useApp } from '../../context/app-context';
+import { useAuth } from '../../context/auth-context';
 import { useToast } from '../../context/toast-context';
-import { Card, CardBody, CardFooter } from '../../components/ui/card';
+import { ENGINE_CONFIG } from '../../config/engine';
 import Input from '../../components/ui/input';
 import Button from '../../components/ui/button';
-import Checkbox from '../../components/ui/checkbox';
 import Select from '../../components/ui/select';
-import Toggle from '../../components/ui/toggle';
 import styles from './settings.module.css';
 
-type SubNavTab = 'General' | 'Appearance' | 'Security';
-
-type NotificationPreference = 'everything' | 'available' | 'ignoring';
+type SubNavTab = 'ocr' | 'api' | 'appearance';
 
 export default function Settings() {
   const { state, updateSettings } = useApp();
+  const { user } = useAuth();
   const { addToast } = useToast();
   const { settings } = state;
 
-  const [activeTab, setActiveTab] = useState<SubNavTab>('General');
-  const [projectName, setProjectName] = useState(settings.displayName || 'OmniParse IDP');
-  const [rootDir, setRootDir] = useState('/web');
-  const [includeOutsideFiles, setIncludeOutsideFiles] = useState(true);
-  const [notificationPref, setNotificationPref] = useState<NotificationPreference>('available');
-  const [fontSize, setFontSize] = useState<'small' | 'medium' | 'large'>('medium');
-  const [shareUsageData, setShareUsageData] = useState(true);
-  const [thirdPartyCookies, setThirdPartyCookies] = useState(false);
-  const [apiKey, setApiKey] = useState('op_live_9f8a3c1e2b4d5e6f7a8b9c0d');
+  const [activeTab, setActiveTab] = useState<SubNavTab>('ocr');
+
+  // OCR Settings
+  const [defaultLanguage, setDefaultLanguage] = useState(settings.language || 'en');
+  const [defaultOutputFormat, setDefaultOutputFormat] = useState(settings.defaultOutputFormat || 'markdown');
+
+  // API Settings
+  const [apiUrl, setApiUrl] = useState(() => 
+    localStorage.getItem('omniparse_api_url') || ENGINE_CONFIG.publicApiBase
+  );
+  const [apiStatus, setApiStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle');
+  const [apiKey, setApiKey] = useState(user?.apiKey || '');
   const [copiedKey, setCopiedKey] = useState(false);
-  const [twoFactor, setTwoFactor] = useState(true);
 
-  const navItems: SubNavTab[] = ['General', 'Appearance', 'Security'];
+  // Appearance Settings
+  const [displayName, setDisplayName] = useState(user?.name || settings.displayName || 'Developer');
+  const [userEmail, setUserEmail] = useState(user?.email || settings.email || '');
+  const [theme, setTheme] = useState(settings.theme || 'light');
 
-  const handleSaveProjectName = (e: React.FormEvent) => {
+  const navItems = [
+    { id: 'ocr' as SubNavTab, label: 'OCR & Output', icon: Cpu },
+    { id: 'api' as SubNavTab, label: 'API Credentials', icon: Key },
+    { id: 'appearance' as SubNavTab, label: 'Appearance & Profile', icon: User },
+  ];
+
+  const handleSaveOcr = (e: React.FormEvent) => {
     e.preventDefault();
-    updateSettings({ displayName: projectName });
-    addToast('Project name updated successfully', 'success');
+    updateSettings({ language: defaultLanguage, defaultOutputFormat: defaultOutputFormat as any });
+    addToast('OCR settings updated', 'success');
   };
 
-  const handleSaveRootDir = (e: React.FormEvent) => {
+  const handleTestConnection = async () => {
+    setApiStatus('testing');
+    try {
+      const { Client } = await import('@gradio/client');
+      const client = await Client.connect(ENGINE_CONFIG.spaceTarget);
+      if (client) {
+        setApiStatus('connected');
+        addToast('Connected to OmniParse Engine', 'success');
+        return;
+      }
+      setApiStatus('error');
+      addToast('Could not reach OmniParse Engine', 'error');
+    } catch {
+      setApiStatus('error');
+      addToast('Could not reach OmniParse Engine', 'error');
+    }
+  };
+
+  const handleSaveApi = (e: React.FormEvent) => {
     e.preventDefault();
-    addToast('Root directory updated successfully', 'success');
+    const cleanUrl = apiUrl.trim().replace(/\/+$/, '');
+    localStorage.setItem('omniparse_api_url', cleanUrl);
+    addToast(`API URL saved: ${cleanUrl}`, 'success');
   };
 
   const handleCopyApiKey = () => {
-    navigator.clipboard.writeText(apiKey);
+    navigator.clipboard.writeText(user?.apiKey || apiKey);
     setCopiedKey(true);
     addToast('API key copied to clipboard', 'success');
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
   const handleRegenerateApiKey = () => {
-    const newKey = `op_live_${Math.random().toString(36).substring(2, 14)}${Math.random().toString(36).substring(2, 14)}`;
+    const newKey = `op_live_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
     setApiKey(newKey);
     addToast('New API key generated', 'success');
   };
 
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSettings({ displayName, email: userEmail, theme: theme as any });
+    addToast('Profile settings updated', 'success');
+  };
+
   return (
     <div className={styles.page}>
-      <h1 className={styles.title}>Settings</h1>
+      {/* Header */}
+      <div className={styles.header}>
+        <h1 className={styles.title}>Settings</h1>
+        <p className={styles.subtitle}>
+          Configure OCR, API connectivity, and display preferences.
+        </p>
+      </div>
 
-      <div className={styles.layoutGrid}>
-        {/* Left Sub-Navigation */}
-        <nav className={styles.subNav}>
-          {navItems.map((item) => (
+      {/* Tabs */}
+      <nav className={styles.tabsNav}>
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
             <button
-              key={item}
-              className={`${styles.navItem} ${activeTab === item ? styles.navItemActive : ''}`}
-              onClick={() => setActiveTab(item)}
+              key={item.id}
+              className={`${styles.tabBtn} ${isActive ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab(item.id)}
             >
-              {item}
+              <Icon size={14} className={styles.tabIcon} />
+              <span>{item.label}</span>
             </button>
-          ))}
-        </nav>
+          );
+        })}
+      </nav>
 
-        {/* Right Main Content Area */}
-        <div className={styles.contentColumn}>
-          {/* GENERAL TAB CONTENT */}
-          {(activeTab === 'General') && (
-            <>
-              {/* Project Name Card */}
-              <Card>
-                <div className={styles.cardHeader}>
-                  <div className={styles.cardTitle}>Project Name</div>
-                  <div className={styles.cardDescription}>Used to identify your project in the dashboard.</div>
+      {/* Content */}
+      <div className={styles.contentArea}>
+        {/* OCR & Output */}
+        {activeTab === 'ocr' && (
+          <form onSubmit={handleSaveOcr} className={styles.settingsCard}>
+            <div className={styles.cardHeader}>
+              <h2 className={styles.cardTitle}>OCR & Output</h2>
+              <p className={styles.cardDescription}>
+                Set the default language and output format for document processing.
+              </p>
+            </div>
+
+            <div className={styles.cardBody}>
+              <div className={styles.settingRow}>
+                <div className={styles.settingInfo}>
+                  <span className={styles.settingLabel}>Default Language</span>
+                  <span className={styles.settingDescription}>
+                    Language used for OCR text extraction.
+                  </span>
                 </div>
-                <form onSubmit={handleSaveProjectName}>
-                  <CardBody className={styles.cardBody}>
-                    <Input
-                      placeholder="Project Name"
-                      value={projectName}
-                      onChange={(e) => setProjectName(e.target.value)}
-                    />
-                  </CardBody>
-                  <CardFooter className={styles.cardFooter}>
-                    <Button type="submit" variant="primary" size="sm">
-                      Save
-                    </Button>
-                  </CardFooter>
-                </form>
-              </Card>
-
-              {/* Root Directory Card */}
-              <Card>
-                <div className={styles.cardHeader}>
-                  <div className={styles.cardTitle}>Root Directory</div>
-                  <div className={styles.cardDescription}>The directory within your project, in which your code is located.</div>
+                <div className={styles.settingControl}>
+                  <Select
+                    value={defaultLanguage}
+                    onChange={(e) => setDefaultLanguage(e.target.value)}
+                    options={[
+                      { value: 'en', label: 'English' },
+                      { value: 'japan', label: 'Japanese (日本語)' },
+                      { value: 'german', label: 'German (Deutsch)' },
+                      { value: 'french', label: 'French (Français)' },
+                      { value: 'es', label: 'Spanish (Español)' },
+                      { value: 'ch', label: 'Chinese (中文)' },
+                      { value: 'hi', label: 'Hindi (हिन्दी)' },
+                    ]}
+                  />
                 </div>
-                <form onSubmit={handleSaveRootDir}>
-                  <CardBody className={styles.cardBody}>
-                    <Input
-                      placeholder="Root Directory"
-                      value={rootDir}
-                      onChange={(e) => setRootDir(e.target.value)}
-                    />
-                    <Checkbox
-                      id="include-files"
-                      label="Include files from outside of the Root Directory"
-                      checked={includeOutsideFiles}
-                      onChange={(checked) => setIncludeOutsideFiles(checked)}
-                    />
-                  </CardBody>
-                  <CardFooter className={styles.cardFooter}>
-                    <Button type="submit" variant="primary" size="sm">
-                      Save
-                    </Button>
-                  </CardFooter>
-                </form>
-              </Card>
-
-              {/* Notifications Card */}
-              <Card>
-                <div className={styles.cardHeader}>
-                  <div className={styles.cardTitle}>Notifications</div>
-                  <div className={styles.cardDescription}>Choose what you want to be notified about.</div>
-                </div>
-                <CardBody className={styles.cardBody}>
-                  <div className={styles.notificationGroup}>
-                    {/* Everything Option */}
-                    <div
-                      className={`${styles.notificationOption} ${notificationPref === 'everything' ? styles.notificationOptionSelected : ''}`}
-                      onClick={() => {
-                        setNotificationPref('everything');
-                        addToast('Notification preference set to Everything', 'info');
-                      }}
-                    >
-                      <Bell size={18} className={styles.optionIcon} />
-                      <div className={styles.optionText}>
-                        <span className={styles.optionTitle}>Everything</span>
-                        <span className={styles.optionDesc}>Email digest, mentions & all activity.</span>
-                      </div>
-                    </div>
-
-                    {/* Available Option */}
-                    <div
-                      className={`${styles.notificationOption} ${notificationPref === 'available' ? styles.notificationOptionSelected : ''}`}
-                      onClick={() => {
-                        setNotificationPref('available');
-                        addToast('Notification preference set to Available', 'info');
-                      }}
-                    >
-                      <MessageSquare size={18} className={styles.optionIcon} />
-                      <div className={styles.optionText}>
-                        <span className={styles.optionTitle}>Available</span>
-                        <span className={styles.optionDesc}>Only mentions and comments.</span>
-                      </div>
-                    </div>
-
-                    {/* Ignoring Option */}
-                    <div
-                      className={`${styles.notificationOption} ${notificationPref === 'ignoring' ? styles.notificationOptionSelected : ''}`}
-                      onClick={() => {
-                        setNotificationPref('ignoring');
-                        addToast('Notification preference set to Ignoring', 'info');
-                      }}
-                    >
-                      <BellOff size={18} className={styles.optionIcon} />
-                      <div className={styles.optionText}>
-                        <span className={styles.optionTitle}>Ignoring</span>
-                        <span className={styles.optionDesc}>Turn off all notifications.</span>
-                      </div>
-                    </div>
-                  </div>
-                </CardBody>
-              </Card>
-
-              {/* Privacy Card */}
-              <Card>
-                <div className={styles.cardHeader}>
-                  <div className={styles.cardTitle}>Privacy</div>
-                  <div className={styles.cardDescription}>Manage your privacy settings.</div>
-                </div>
-                <CardBody className={styles.cardBody}>
-                  <div className={styles.settingRow}>
-                    <div className={styles.settingInfo}>
-                      <span className={styles.settingLabel}>Share Usage Data</span>
-                      <span className={styles.settingDescription}>
-                        Help us improve the product by sharing anonymous usage data.
-                      </span>
-                    </div>
-                    <Toggle
-                      checked={shareUsageData}
-                      onChange={(checked) => {
-                        setShareUsageData(checked);
-                        addToast(`Share usage data ${checked ? 'enabled' : 'disabled'}`, 'info');
-                      }}
-                    />
-                  </div>
-
-                  <div className={styles.settingRow}>
-                    <div className={styles.settingInfo}>
-                      <span className={styles.settingLabel}>Allow Third-Party Cookies</span>
-                      <span className={styles.settingDescription}>
-                        Enable third-party cookies for personalized content.
-                      </span>
-                    </div>
-                    <Toggle
-                      checked={thirdPartyCookies}
-                      onChange={(checked) => {
-                        setThirdPartyCookies(checked);
-                        addToast(`Third-party cookies ${checked ? 'enabled' : 'disabled'}`, 'info');
-                      }}
-                    />
-                  </div>
-                </CardBody>
-              </Card>
-            </>
-          )}
-
-          {/* APPEARANCE TAB CONTENT */}
-          {(activeTab === 'Appearance') && (
-            <Card>
-              <div className={styles.cardHeader}>
-                <div className={styles.cardTitle}>Appearance</div>
-                <div className={styles.cardDescription}>Choose your preferred theme and font size.</div>
               </div>
-              <CardBody className={styles.cardBody}>
-                <div className={styles.settingRow}>
-                  <div className={styles.settingInfo}>
-                    <span className={styles.settingLabel}>Theme</span>
-                    <span className={styles.settingDescription}>Choose between light, dark, and system theme.</span>
-                  </div>
-                  <div className={styles.settingControl}>
-                    <Select
-                      options={[
-                        { value: 'light', label: 'Light' },
-                        { value: 'dark', label: 'Dark' },
-                        { value: 'system', label: 'System' },
-                      ]}
-                      value={settings.theme}
-                      onChange={(e) => {
-                        const newTheme = e.target.value as 'light' | 'dark' | 'system';
-                        updateSettings({ theme: newTheme });
-                        addToast(`Theme set to ${newTheme}`, 'success');
-                      }}
+
+              <div className={styles.settingRow}>
+                <div className={styles.settingInfo}>
+                  <span className={styles.settingLabel}>Default Output Format</span>
+                  <span className={styles.settingDescription}>
+                    Format generated when documents finish processing.
+                  </span>
+                </div>
+                <div className={styles.settingControl}>
+                  <Select
+                    value={defaultOutputFormat}
+                    onChange={(e) => setDefaultOutputFormat(e.target.value as any)}
+                    options={[
+                      { value: 'markdown', label: 'Markdown' },
+                      { value: 'json', label: 'JSON' },
+                      { value: 'plaintext', label: 'Plain Text' },
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.cardFooter}>
+              <Button type="submit" variant="primary" size="sm">
+                Save Preferences
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* API Credentials */}
+        {activeTab === 'api' && (
+          <form onSubmit={handleSaveApi} className={styles.settingsCard}>
+            <div className={styles.cardHeader}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h2 className={styles.cardTitle}>API Credentials</h2>
+                  <p className={styles.cardDescription}>
+                    Manage your API endpoint and authentication key.
+                  </p>
+                </div>
+                <Link
+                  to="/api-keys"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    color: '#6366f1',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    border: '1px solid rgba(99, 102, 241, 0.2)',
+                  }}
+                >
+                  <Key size={14} />
+                  <span>Developer Portal →</span>
+                </Link>
+              </div>
+            </div>
+
+            <div className={styles.cardBody}>
+              <div className={styles.settingRow}>
+                <div className={styles.settingInfo}>
+                  <span className={styles.settingLabel}>Engine URL</span>
+                  <span className={styles.settingDescription}>
+                    The remote OCR engine endpoint.
+                  </span>
+                </div>
+                <div className={styles.settingControl} style={{ minWidth: '320px', gap: '8px' }}>
+                  <Input
+                    value={apiUrl}
+                    onChange={(e) => setApiUrl(e.target.value)}
+                    placeholder="https://api.omniparse.dev/v1"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    onClick={handleTestConnection}
+                    disabled={apiStatus === 'testing'}
+                  >
+                    <Activity size={14} />
+                    <span>{apiStatus === 'testing' ? 'Testing...' : 'Test Connection'}</span>
+                  </Button>
+                </div>
+              </div>
+
+              <div className={styles.settingRow}>
+                <div className={styles.settingInfo}>
+                  <span className={styles.settingLabel}>API Key</span>
+                  <span className={styles.settingDescription}>
+                    Include as <code>Authorization: Bearer &lt;key&gt;</code> in your requests.
+                  </span>
+                </div>
+                <div className={styles.settingControl} style={{ minWidth: '320px' }}>
+                  <div className={styles.apiKeyInputGroup}>
+                    <Input
+                      value={user?.apiKey || apiKey}
+                      readOnly
+                      mono
                     />
+                    <Button type="button" variant="secondary" size="md" onClick={handleCopyApiKey} title="Copy API Key">
+                      {copiedKey ? <Check size={14} style={{ color: 'var(--status-success)' }} /> : <Copy size={14} />}
+                    </Button>
+                    <Button type="button" variant="secondary" size="md" onClick={handleRegenerateApiKey} title="Generate New Key">
+                      <RefreshCw size={14} />
+                    </Button>
                   </div>
                 </div>
+              </div>
+            </div>
 
-                <div className={styles.settingRow}>
-                  <div className={styles.settingInfo}>
-                    <span className={styles.settingLabel}>Font Size</span>
-                    <span className={styles.settingDescription}>Adjust the font size to your preference.</span>
-                  </div>
-                  <div className={styles.settingControl}>
-                    <Select
-                      options={[
-                        { value: 'small', label: 'Small' },
-                        { value: 'medium', label: 'Medium' },
-                        { value: 'large', label: 'Large' },
-                      ]}
-                      value={fontSize}
-                      onChange={(e) => {
-                        const size = e.target.value as 'small' | 'medium' | 'large';
-                        setFontSize(size);
-                        addToast(`Font size set to ${size}`, 'info');
-                      }}
-                    />
-                  </div>
+            <div className={styles.cardFooter}>
+              <Button type="submit" variant="primary" size="sm">
+                Save API Settings
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* Appearance & Profile */}
+        {activeTab === 'appearance' && (
+          <form onSubmit={handleSaveProfile} className={styles.settingsCard}>
+            <div className={styles.cardHeader}>
+              <h2 className={styles.cardTitle}>Appearance & Profile</h2>
+              <p className={styles.cardDescription}>
+                Update your display name, email, and theme.
+              </p>
+            </div>
+
+            <div className={styles.cardBody}>
+              <div className={styles.settingRow}>
+                <div className={styles.settingInfo}>
+                  <span className={styles.settingLabel}>Display Name</span>
+                  <span className={styles.settingDescription}>
+                    Shown in the top bar and user menu.
+                  </span>
                 </div>
-              </CardBody>
-            </Card>
-          )}
-
-          {/* SECURITY TAB CONTENT */}
-          {(activeTab === 'Security') && (
-            <>
-              <Card>
-                <div className={styles.cardHeader}>
-                  <div className={styles.cardTitle}>API Keys</div>
-                  <div className={styles.cardDescription}>Manage your secret keys for accessing OmniParse IDP APIs.</div>
+                <div className={styles.settingControl}>
+                  <Input
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Your name"
+                  />
                 </div>
-                <CardBody className={styles.cardBody}>
-                  <div className={styles.settingRow}>
-                    <div className={styles.settingInfo} style={{ flex: 1 }}>
-                      <span className={styles.settingLabel}>Live API Key</span>
-                      <span className={styles.settingDescription}>Use this key to authenticate backend requests.</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <Button variant="ghost" size="sm" onClick={handleCopyApiKey}>
-                        {copiedKey ? <Check size={14} /> : <Copy size={14} />}
-                        {copiedKey ? 'Copied' : 'Copy Key'}
-                      </Button>
-                      <Button variant="secondary" size="sm" onClick={handleRegenerateApiKey}>
-                        <Key size={14} />
-                        Roll Key
-                      </Button>
-                    </div>
-                  </div>
-                </CardBody>
-              </Card>
+              </div>
 
-              <Card>
-                <div className={styles.cardHeader}>
-                  <div className={styles.cardTitle}>Security Preferences</div>
-                  <div className={styles.cardDescription}>Manage authentication & session settings.</div>
+              <div className={styles.settingRow}>
+                <div className={styles.settingInfo}>
+                  <span className={styles.settingLabel}>Email Address</span>
+                  <span className={styles.settingDescription}>
+                    Your account email.
+                  </span>
                 </div>
-                <CardBody className={styles.cardBody}>
-                  <div className={styles.settingRow}>
-                    <div className={styles.settingInfo}>
-                      <span className={styles.settingLabel}>Two-Factor Authentication</span>
-                      <span className={styles.settingDescription}>
-                        Require 2FA verification when logging in.
-                      </span>
-                    </div>
-                    <Toggle
-                      checked={twoFactor}
-                      onChange={(checked) => {
-                        setTwoFactor(checked);
-                        addToast(`Two-factor authentication ${checked ? 'enabled' : 'disabled'}`, 'info');
-                      }}
-                    />
-                  </div>
+                <div className={styles.settingControl}>
+                  <Input
+                    type="email"
+                    value={userEmail}
+                    onChange={(e) => setUserEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </div>
+              </div>
 
-                  <div className={styles.settingRow}>
-                    <div className={styles.settingInfo}>
-                      <span className={styles.settingLabel}>Authentication Provider</span>
-                      <span className={styles.settingDescription}>Managed via WorkOS AuthKit Enterprise Single Sign-On.</span>
-                    </div>
-                    <Shield size={18} style={{ color: 'var(--status-success)' }} />
-                  </div>
-                </CardBody>
-              </Card>
-            </>
-          )}
-        </div>
+              <div className={styles.settingRow}>
+                <div className={styles.settingInfo}>
+                  <span className={styles.settingLabel}>Theme</span>
+                  <span className={styles.settingDescription}>
+                    Choose between light, dark, or system theme.
+                  </span>
+                </div>
+                <div className={styles.settingControl}>
+                  <Select
+                    value={theme}
+                    onChange={(val) => setTheme(val as any)}
+                    options={[
+                      { value: 'light', label: 'Light' },
+                      { value: 'system', label: 'System' },
+                      { value: 'dark', label: 'Dark' },
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.cardFooter}>
+              <Button type="submit" variant="primary" size="sm">
+                Save Profile
+              </Button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

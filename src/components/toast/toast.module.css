@@ -13,17 +13,18 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background-color: var(--bg-card);
+  padding: 12px 16px;
+  background-color: #FFFFFF;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
   color: var(--text-primary);
   pointer-events: auto;
   animation: slideUp var(--transition-normal) forwards;
   min-width: 280px;
-  max-width: 400px;
+  max-width: 420px;
 }
 
 .toast.exiting {
@@ -32,6 +33,7 @@
 
 .icon {
   flex-shrink: 0;
+  display: flex;
 }
 
 .success .icon { color: var(--status-success); }
@@ -47,9 +49,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -63,25 +65,26 @@
   color: var(--text-primary);
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+.progressBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--border-subtle);
+  overflow: hidden;
 }
 
-@keyframes fadeOut {
-  from { opacity: 1; }
-  to { opacity: 0; }
+.progress {
+  height: 100%;
+  animation: shrink linear forwards;
 }
 
-@media (max-width: 768px) {
-  .container {
-    bottom: 72px;
-    right: var(--space-4);
-    left: var(--space-4);
-  }
+.success .progress { background-color: var(--status-success); }
+.error .progress { background-color: var(--status-error); }
+.info .progress { background-color: var(--status-info); }
 
-  .toast {
-    min-width: auto;
-    max-width: none;
-  }
+@keyframes shrink {
+  from { width: 100%; }
+  to { width: 0%; }
 }

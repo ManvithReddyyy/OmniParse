@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Copy, Download, Sparkles, Upload, FileText } from 'lucide-react';
+import { ArrowRight, Copy, Download, Sparkles, Upload, FileText, Image as ImageIcon } from 'lucide-react';
 import { type OutputFormat } from '../../data/mock';
 import { useApp } from '../../context/app-context';
+import {
+  generateMarkdownWithImages,
+  generateJsonWithImages,
+  generatePlainTextWithImages,
+} from '../../utils/document-parser';
 import Select from '../../components/ui/select';
 import Button from '../../components/ui/button';
 import { useToast } from '../../context/toast-context';
@@ -30,9 +35,37 @@ export default function Transform() {
 
   const activeId = selectedDocId || completedDocs[0]?.id || '';
   const transform = state.transformStore[activeId];
+  const analysis = state.analysisStore[activeId];
   const selectedDoc = completedDocs.find((d) => d.id === activeId);
 
   const getOutput = () => {
+    if (!transform && !analysis) return '';
+
+    // If analysis has extracted images and transform doesn't have inline image tags yet, dynamically generate with images
+    if (analysis && analysis.images && analysis.images.length > 0) {
+      if (format === 'markdown' && (!transform?.markdown || !transform.markdown.includes('!['))) {
+        return generateMarkdownWithImages(
+          analysis.textBlocks.map((b) => b.text),
+          analysis.images,
+          selectedDoc?.filename || 'document'
+        );
+      }
+      if (format === 'json' && (!transform?.json || !transform.json.includes('"images": ['))) {
+        return generateJsonWithImages(
+          analysis.textBlocks.map((b) => b.text),
+          analysis.images,
+          selectedDoc?.filename || 'document',
+          analysis.metadata
+        );
+      }
+      if (format === 'plaintext' && (!transform?.plaintext || !transform.plaintext.includes('[Figure:'))) {
+        return generatePlainTextWithImages(
+          analysis.textBlocks.map((b) => b.text),
+          analysis.images
+        );
+      }
+    }
+
     if (!transform) return '';
     return transform[format];
   };
@@ -177,7 +210,28 @@ export default function Transform() {
       {transform ? (
         <div className={styles.outputSection}>
           <div className={styles.outputHeader}>
-            <h3 className={styles.outputTitle}>Generated Output</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 className={styles.outputTitle}>Generated Output</h3>
+              {analysis && analysis.images && analysis.images.length > 0 && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#2563EB',
+                    border: '1px solid #BFDBFE',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <ImageIcon size={11} />
+                  {analysis.images.length} {analysis.images.length === 1 ? 'Figure' : 'Figures'} Inline
+                </span>
+              )}
+            </div>
             <div className={styles.outputActions}>
               <Button variant="ghost" size="sm" onClick={handleCopy}>
                 <Copy size={14} />

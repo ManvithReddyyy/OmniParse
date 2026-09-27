@@ -1,8 +1,9 @@
 import { useAuth } from '../../context/auth-context';
 import { useState, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { FileText } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { FileText, ArrowLeft, ArrowRight, Download } from 'lucide-react';
 import { useApp } from '../../context/app-context';
+import { ENGINE_CONFIG } from '../../config/engine';
 import {
   getFileExtension,
   type Document,
@@ -12,17 +13,25 @@ import {
   type ProcessingJob,
   type ExtractedImage,
 } from '../../data/mock';
-import { parseDocumentFile, createAnalysisFromLines, extractEmbeddedImagesFromFile } from '../../utils/document-parser';
+import {
+  parseDocumentFile,
+  createAnalysisFromLines,
+  extractEmbeddedImagesFromFile,
+  generateMarkdownWithImages,
+  generateJsonWithImages,
+  generatePlainTextWithImages,
+} from '../../utils/document-parser';
 import UploadZone from '../../components/upload/upload-zone';
 import DocumentViewer from './document-viewer';
 import Inspector from './inspector';
-import ProcessingStatus from './processing-status';
 import Badge from '../../components/ui/badge';
+import Button from '../../components/ui/button';
 import styles from './analyze.module.css';
 
-type Mode = 'upload' | 'processing' | 'workspace';
+type Mode = 'upload' | 'workspace';
 
 export default function Analyze() {
+  const navigate = useNavigate();
   const { token } = useAuth();
   const [searchParams] = useSearchParams();
   const { state, addDocument, setActiveDocument } = useApp();
@@ -31,7 +40,7 @@ export default function Analyze() {
   const [fileType, setFileType] = useState('');
   const [analysis, setAnalysis] = useState<DocumentAnalysis | null>(null);
   const [docName, setDocName] = useState('');
-  const [ocrLanguage, setOcrLanguage] = useState<string>('en');
+  const [isExtracting, setIsExtracting] = useState(false);
 
   // Check for doc param in URL (coming from dashboard)
   useEffect(() => {
@@ -43,55 +52,42 @@ export default function Analyze() {
         setFileType(doc.type);
         setAnalysis(state.analysisStore[doc.id] ?? null);
         setActiveDocument(doc);
+        setIsExtracting(false);
         setMode('workspace');
       }
     }
   }, [searchParams, state.documents, state.analysisStore, setActiveDocument]);
 
-  const handleFileSelect = useCallback((file: File) => {
-    setCurrentFile(file);
-    setDocName(file.name);
-    setFileType(getFileExtension(file.name));
-    setMode('processing');
-  }, []);
-
   const finishProcessing = useCallback(
-    async (lines: string[], backendImages?: ExtractedImage[], pageImages: string[] = [], durationSec: number = 1.2) => {
-      if (!currentFile) return;
-
+    async (
+      file: File,
+      lines: string[],
+      backendImages?: ExtractedImage[],
+      pageImages: string[] = [],
+      durationSec: number = 1.2
+    ) => {
       let images = backendImages || [];
       if (!images || images.length === 0) {
-        images = await extractEmbeddedImagesFromFile(currentFile);
+        images = await extractEmbeddedImagesFromFile(file);
       }
 
-      const liveAnalysis = createAnalysisFromLines(lines, currentFile, images, pageImages);
+      const liveAnalysis = createAnalysisFromLines(lines, file, images, pageImages);
       const docId = 'doc-' + Date.now();
 
-      const ext = (getFileExtension(currentFile.name) || 'pdf') as DocumentType;
+      const ext = (getFileExtension(file.name) || 'pdf') as DocumentType;
       const liveDoc: Document = {
         id: docId,
-        filename: currentFile.name,
+        filename: file.name,
         type: ext,
         status: 'completed',
         uploadDate: new Date().toISOString(),
-        fileSize: currentFile.size,
+        fileSize: file.size,
         pages: liveAnalysis.metadata.pages,
       };
 
-      const markdownText = lines.map((l, i) => (i === 0 ? `# ${l}` : i === 1 ? `## ${l}` : l)).join('\n\n');
-      const jsonText = JSON.stringify(
-        {
-          document: currentFile.name,
-          ocrLanguage,
-          extractedLines: lines,
-          extractedImagesCount: images.length,
-          renderedPagesCount: pageImages.length,
-          metadata: liveAnalysis.metadata,
-        },
-        null,
-        2
-      );
-      const plainText = lines.join('\n');
+      const markdownText = generateMarkdownWithImages(lines, images, file.name);
+      const jsonText = generateJsonWithImages(lines, images, file.name, liveAnalysis.metadata);
+      const plainText = generatePlainTextWithImages(lines, images);
       const approxTokens = Math.round(plainText.length / 4);
 
       const liveTransform: TransformOutput = {
@@ -108,7 +104,7 @@ export default function Analyze() {
       const liveJob: ProcessingJob = {
         id: 'job-' + Date.now(),
         documentId: docId,
-        documentName: currentFile.name,
+        documentName: file.name,
         status: 'completed',
         started: new Date().toISOString(),
         duration: `${durationSec.toFixed(1)}s`,
@@ -117,33 +113,75 @@ export default function Analyze() {
 
       addDocument(liveDoc, liveAnalysis, liveTransform, liveJob);
       setAnalysis(liveAnalysis);
-      setMode('workspace');
+      setIsExtracting(false);
     },
-    [currentFile, addDocument, ocrLanguage]
+    [addDocument]
   );
 
-  const handleProcessingComplete = useCallback(async () => {
-    const startTime = Date.now();
-    if (currentFile) {
-      // Try PaddleOCR backend first (120s timeout for large multi-page documents)
+  const executeOcr = useCallback(
+    async (fileToProcess: File) => {
+      const startTime = Date.now();
+      const isImage = fileToProcess.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff|gif)$/i.test(fileToProcess.name);
+
+      // Direct OCR for images via Gradio
+      if (isImage) {
+        try {
+          const pageImageDataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve((e.target?.result as string) || '');
+            reader.onerror = () => resolve('');
+            reader.readAsDataURL(fileToProcess);
+          });
+
+          const customUrl = localStorage.getItem('omniparse_api_url');
+          const spaceTarget = customUrl && customUrl.includes('hf.space')
+            ? customUrl
+            : ENGINE_CONFIG.spaceTarget;
+
+          const { Client, handle_file } = await import('@gradio/client');
+          const client = await Client.connect(spaceTarget);
+          const result = await client.predict('/gradio_ocr', {
+            img: typeof handle_file === 'function' ? handle_file(fileToProcess) : fileToProcess,
+          });
+
+          const rawText = ((result.data as any)?.[0] as string) || '';
+          const lines = rawText
+            .split('\n')
+            .map((l: string) => l.trim())
+            .filter((l: string) => l.length > 0 && l !== '[No text detected in image]');
+
+          const elapsedSec = Math.max((Date.now() - startTime) / 1000, 0.5);
+          await finishProcessing(
+            fileToProcess,
+            lines.length > 0 ? lines : [rawText.trim() || '[No text detected in image]'],
+            [],
+            pageImageDataUrl ? [pageImageDataUrl] : [],
+            elapsedSec
+          );
+          return;
+        } catch (gradioErr) {
+          console.warn('[OmniParse] Gradio cloud OCR note:', gradioErr);
+        }
+      }
+
+      // REST API attempt (for PDFs/documents or local server)
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000);
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
 
         const formData = new FormData();
-        formData.append('file', currentFile);
-        formData.append('ocr_lang', ocrLanguage);
+        formData.append('file', fileToProcess);
+        formData.append('ocr_lang', 'auto');
 
-        console.log(`[OmniParse] Sending ${currentFile.name} to PaddleOCR backend (lang: '${ocrLanguage}')...`);
+        const customApiUrl = localStorage.getItem('omniparse_api_url');
+        const isCustomRemote = customApiUrl && !customApiUrl.includes('127.0.0.1') && !customApiUrl.includes('localhost');
+        const endpoint = isCustomRemote ? `${customApiUrl.replace(/\/+$/, '')}/v1/vision/analyze` : '/api/v1/extract';
 
-        const res = await fetch('/api/v1/extract', {
-  method: 'POST',
-  headers: {
-    Authorization: `Bearer ${token}`,
-  },
-  body: formData,
-  signal: controller.signal,
-});
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+        });
 
         clearTimeout(timeoutId);
 
@@ -151,9 +189,13 @@ export default function Analyze() {
 
         if (res.ok) {
           const data = await res.json();
-          console.log(`[OmniParse] PaddleOCR returned ${data.payload?.extracted_text?.length ?? 0} lines, ${data.payload?.extracted_images?.length ?? 0} images & ${data.payload?.page_images?.length ?? 0} slide page images`);
-          if (data.payload?.extracted_text?.length > 0 || data.payload?.extracted_images?.length > 0 || data.payload?.page_images?.length > 0) {
+          if (
+            data.payload?.extracted_text?.length > 0 ||
+            data.payload?.extracted_images?.length > 0 ||
+            data.payload?.page_images?.length > 0
+          ) {
             await finishProcessing(
+              fileToProcess,
               data.payload.extracted_text || [],
               data.payload.extracted_images || [],
               data.payload.page_images || [],
@@ -163,73 +205,49 @@ export default function Analyze() {
           }
         }
       } catch (err) {
-        console.warn('[OmniParse] PaddleOCR backend unavailable, falling back to client-side parsing.', err);
+        console.warn('[OmniParse] Local/REST backend note:', err);
       }
 
-      // Fallback: client-side extraction
+      // Client-side extraction fallback (PDF.js, Office docx, PPTX)
       const elapsedSec = Math.max((Date.now() - startTime) / 1000, 0.4);
-      const lines = await parseDocumentFile(currentFile);
-      const images = await extractEmbeddedImagesFromFile(currentFile);
-      if (lines.length > 0 || images.length > 0) {
-        await finishProcessing(lines, images, [], elapsedSec);
-        return;
-      }
-    }
+      const lines = await parseDocumentFile(fileToProcess);
+      const images = await extractEmbeddedImagesFromFile(fileToProcess);
+      await finishProcessing(
+        fileToProcess,
+        lines.length > 0 ? lines : [fileToProcess.name],
+        images,
+        [],
+        elapsedSec
+      );
+    },
+    [finishProcessing, token]
+  );
 
-    const elapsedSec = Math.max((Date.now() - startTime) / 1000, 0.4);
-    await finishProcessing([currentFile?.name ?? 'Uploaded Document'], [], [], elapsedSec);
-  }, [currentFile, finishProcessing, ocrLanguage]);
+  const handleFileSelect = useCallback(
+    (file: File) => {
+      setCurrentFile(file);
+      setDocName(file.name);
+      setFileType(getFileExtension(file.name));
+      setAnalysis(null);
+      setIsExtracting(true);
+      setMode('workspace');
 
-  const languages = [
-    { code: 'en', label: '🇬🇧 English' },
-    { code: 'japan', label: '🇯🇵 Japanese (日本語)' },
-    { code: 'german', label: '🇩🇪 German (Deutsch)' },
-    { code: 'french', label: '🇫🇷 French (Français)' },
-    { code: 'es', label: '🇪🇸 Spanish (Español)' },
-    { code: 'ch', label: '🇨🇳 Chinese (中文)' },
-    { code: 'hi', label: '🇮🇳 Hindi (हिन्दी)' },
-  ];
+      // Start OCR extraction immediately
+      executeOcr(file);
+    },
+    [executeOcr]
+  );
 
   if (mode === 'upload') {
     return (
       <div className={styles.page}>
         <div className={styles.uploadMode}>
           <div className={styles.uploadWrapper}>
-            <h1 className={styles.uploadTitle}>Analyze a Document</h1>
-            <p className={styles.uploadSubtitle}>
-              Upload your document and OmniParse will analyze its layout, extract text, detect tables and images, and reconstruct the reading order.
-            </p>
-
-            {/* OCR Language Selector */}
-            <div style={{ marginBottom: '24px', textAlign: 'center' }}>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-                Select Document Language for PaddleOCR:
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px' }}>
-                {languages.map((lang) => {
-                  const isActive = ocrLanguage === lang.code;
-                  return (
-                    <button
-                      key={lang.code}
-                      type="button"
-                      onClick={() => setOcrLanguage(lang.code)}
-                      style={{
-                        padding: '6px 14px',
-                        borderRadius: 'var(--radius-full)',
-                        fontSize: 'var(--text-xs)',
-                        fontWeight: 600,
-                        border: isActive ? '1px solid #6366f1' : '1px solid var(--border)',
-                        backgroundColor: isActive ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-card)',
-                        color: isActive ? '#818cf8' : 'var(--text-secondary)',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      {lang.label}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className={styles.uploadHeader}>
+              <h1 className={styles.uploadTitle}>Document Ingestion</h1>
+              <p className={styles.uploadSubtitle}>
+                Drop any PDF, PowerPoint presentation, Word document, or image to preview and extract OCR text.
+              </p>
             </div>
 
             <UploadZone onFileSelect={handleFileSelect} />
@@ -239,45 +257,89 @@ export default function Analyze() {
     );
   }
 
-  if (mode === 'processing') {
-    return (
-      <div className={styles.page}>
-        <ProcessingStatus onComplete={handleProcessingComplete} />
-      </div>
-    );
-  }
-
-  // Workspace mode
+  // Workspace mode: Direct Document Preview (Left) & OCR Output (Right)
   return (
     <div className={styles.page}>
+      {/* Top Workspace Action Toolbar */}
+      <div className={styles.toolbar}>
+        <div className={styles.toolbarLeft}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setMode('upload')}
+            title="Upload another document"
+          >
+            <ArrowLeft size={14} />
+            <span>Ingest New</span>
+          </Button>
+
+          <span style={{ color: 'var(--border)' }}>|</span>
+
+          <FileText size={15} style={{ color: 'var(--text-muted)' }} />
+          <span className={styles.toolbarFilename} title={docName}>
+            {docName}
+          </span>
+          <Badge status={isExtracting ? 'processing' : 'completed'} />
+        </div>
+
+        <div className={styles.toolbarRight}>
+          {isExtracting ? (
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className={styles.simpleSpinner} style={{ width: '12px', height: '12px', borderWidth: '1.5px' }} />
+              Running OCR…
+            </span>
+          ) : (
+            <>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  if (!analysis) return;
+                  const text = analysis.textBlocks.map((b) => b.text).join('\n');
+                  const blob = new Blob([text], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${docName.replace(/\.[^/.]+$/, '')}_raw.txt`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Download size={13} />
+                <span>Raw Text</span>
+              </Button>
+
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => navigate('/transform')}
+              >
+                <span>Transform & Export</span>
+                <ArrowRight size={13} />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Main Workspace Split Layout */}
       <div className={styles.workspace}>
-        {/* Left: Document Viewer */}
+        {/* Left: Document & Page Canvas Viewer (Instant Preview of Current Document) */}
         <div className={styles.viewerPanel}>
-          <div className={styles.toolbar}>
-            <div className={styles.toolbarLeft}>
-              <FileText size={14} style={{ color: 'var(--text-muted)' }} />
-              <span className={styles.toolbarFilename}>{docName}</span>
-            </div>
-            <div className={styles.toolbarRight}>
-              <Badge status="completed" />
-            </div>
-          </div>
           <DocumentViewer file={currentFile} fileType={fileType} docName={docName} analysis={analysis} />
         </div>
 
-        {/* Right: Inspector */}
+        {/* Right: Output Preview of OCR (Minimal Spinner while extracting, Output Inspector on complete) */}
         <div className={styles.inspectorPanel}>
-          <div className={styles.toolbar}>
-            <div className={styles.toolbarLeft}>
-              <span
-                className={styles.toolbarFilename}
-                style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-primary)', fontWeight: 500 }}
-              >
-                PaddleOCR Inspector
-              </span>
+          {isExtracting ? (
+            <div className={styles.extractingContainer}>
+              <div className={styles.simpleSpinner} />
+              <span className={styles.extractingText}>Extracting OCR text & layout…</span>
             </div>
-          </div>
-          <Inspector analysis={analysis} />
+          ) : (
+            <Inspector analysis={analysis} />
+          )}
         </div>
       </div>
     </div>

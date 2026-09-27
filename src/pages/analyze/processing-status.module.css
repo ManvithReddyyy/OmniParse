@@ -60,17 +60,19 @@
 }
 
 .stepCompleted .stepIcon {
-  background-color: var(--text-primary);
-  border-color: var(--text-primary);
-  color: var(--bg-primary);
+  background-color: var(--status-success);
+  border-color: var(--status-success);
+  color: #FFFFFF;
 }
 
 .stepCompleted .stepLine {
-  background-color: var(--text-primary);
+  background-color: var(--status-success);
 }
 
 .stepActive .stepIcon {
-  border-color: var(--text-primary);
+  border-color: var(--accent);
+  background-color: var(--accent-subtle);
+  color: var(--accent);
   animation: pulse 1.5s ease-in-out infinite;
 }
 

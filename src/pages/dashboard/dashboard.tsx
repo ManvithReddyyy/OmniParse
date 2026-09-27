@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Upload,
@@ -7,20 +7,22 @@ import {
   FileType,
   Presentation,
   ArrowRight,
+  CheckCircle2,
+  Key,
+  Copy,
+  Code2,
 } from 'lucide-react';
 import { useApp } from '../../context/app-context';
 import { useAuth } from '../../context/auth-context';
+import { useToast } from '../../context/toast-context';
 import {
-  supportedFormats,
   formatRelativeDate,
   formatFileSize,
   type ProcessingJob,
 } from '../../data/mock';
-import { Card, CardBody } from '../../components/ui/card';
 import Button from '../../components/ui/button';
 import Badge from '../../components/ui/badge';
 import Table from '../../components/ui/table';
-import Typewriter from '../../components/ui/typewriter';
 import styles from './dashboard.module.css';
 
 const fileIcons: Record<string, React.ElementType> = {
@@ -38,33 +40,14 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { state } = useApp();
   const { user } = useAuth();
+  const { addToast } = useToast();
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
-    month: 'long',
+    month: 'short',
     day: 'numeric',
   });
-
-  const [subtitle, setSubtitle] = useState<string>(
-    `${today} • Let us ship to production before sprint review`
-  );
-
-  useEffect(() => {
-    fetch('/api/v1/trends')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.quote) {
-          setSubtitle(`${today} • ${data.quote}`);
-        }
-      })
-      .catch(() => {});
-  }, [today]);
-
-  const handleFormatClick = (ext: string) => {
-    const norm = ext.toLowerCase();
-    setSelectedFormat((prev) => (prev === norm ? null : norm));
-  };
 
   const filteredDocs = selectedFormat
     ? state.documents.filter((doc) => doc.type.toLowerCase() === selectedFormat)
@@ -77,9 +60,9 @@ export default function Dashboard() {
   const jobColumns = [
     {
       key: 'documentName',
-      header: 'Document',
+      header: 'Document Name',
       render: (row: ProcessingJob) => (
-        <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+        <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', fontWeight: 500 }}>
           {row.documentName}
         </span>
       ),
@@ -91,7 +74,7 @@ export default function Dashboard() {
     },
     {
       key: 'started',
-      header: 'Started',
+      header: 'Ingested',
       render: (row: ProcessingJob) => formatRelativeDate(row.started),
     },
     { key: 'duration', header: 'Duration' },
@@ -99,7 +82,20 @@ export default function Dashboard() {
       key: 'outputFormat',
       header: 'Format',
       render: (row: ProcessingJob) => (
-        <span style={{ textTransform: 'capitalize' }}>{row.outputFormat}</span>
+        <span style={{ textTransform: 'capitalize', fontSize: 'var(--text-xs)' }}>{row.outputFormat}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (row: ProcessingJob) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate(`/analyze?doc=${row.documentId}`)}
+        >
+          View &rarr;
+        </Button>
       ),
     },
   ];
@@ -108,30 +104,112 @@ export default function Dashboard() {
     <div className={styles.page}>
       {/* Header */}
       <div className={styles.header}>
-        <h1 className={styles.greeting}>
-        <Typewriter
-        text={`Welcome back, ${user?.name || 'User'}`}
-        speed={40}
-        delay={150}
-        />       
-         </h1>
-        <p className={styles.date}>
-          <Typewriter
-            key={subtitle}
-            text={subtitle}
-            speed={25}
-            delay={600}
-            loop={false}
-          />
-        </p>
+        <div className={styles.headerLeft}>
+          <h1 className={styles.greeting}>
+            Dashboard
+          </h1>
+          <p className={styles.date}>
+            {today} • Welcome{user?.name ? `, ${user.name}` : ''}
+          </p>
+        </div>
+
         <div className={styles.quickActions}>
-          <Button variant="primary" size="lg" onClick={() => navigate('/analyze')}>
-            <Upload size={16} />
+          <Button variant="secondary" size="md" onClick={() => navigate('/transform')}>
+            <ArrowRight size={15} />
+            Transform
+          </Button>
+          <Button variant="primary" size="md" onClick={() => navigate('/analyze')}>
+            <Upload size={15} />
             Upload Document
           </Button>
-          <Button variant="secondary" size="lg" onClick={() => navigate('/transform')}>
-            <ArrowRight size={16} />
-            Transform
+        </div>
+      </div>
+
+      {/* API Key Quick Card */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '16px 20px',
+        backgroundColor: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)',
+        flexWrap: 'wrap',
+        gap: '14px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'rgba(99, 102, 241, 0.12)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#6366f1',
+          }}>
+            <Key size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>Your API Key:</span>
+              <code style={{ backgroundColor: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+                {user?.apiKey ? `${user.apiKey.substring(0, 10)}••••••••••••` : 'op_live_••••••••'}
+              </code>
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Use this key to connect your apps and scripts to the OmniParse API.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              if (user?.apiKey) {
+                navigator.clipboard.writeText(user.apiKey);
+                addToast('API Key copied to clipboard', 'success');
+              }
+            }}
+          >
+            <Copy size={13} />
+            <span>Copy Key</span>
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => navigate('/api-keys')}
+          >
+            <Code2 size={13} />
+            <span>API Docs →</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Upload Banner */}
+      <div className={styles.dropzoneBanner}>
+        <div className={styles.dropzoneBannerLeft}>
+          <div className={styles.dropzoneIconBox}>
+            <Upload size={20} strokeWidth={2} />
+          </div>
+          <div>
+            <div className={styles.dropzoneTitle}>Upload Documents</div>
+            <div className={styles.dropzoneSub}>
+              Drop PDF, PowerPoint, Word, or image files to extract text, tables, and structured data.
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.dropzonePills}>
+          <span className={styles.formatPill}>.PDF</span>
+          <span className={styles.formatPill}>.PPTX</span>
+          <span className={styles.formatPill}>.DOCX</span>
+          <span className={styles.formatPill}>.PNG / .JPG</span>
+          <Button variant="primary" size="sm" onClick={() => navigate('/analyze')}>
+            Upload File
           </Button>
         </div>
       </div>
@@ -139,103 +217,89 @@ export default function Dashboard() {
       {/* Recent Documents */}
       <div className={styles.section}>
         <div className={styles.sectionHeader}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <h2 className={styles.sectionTitle}>Recent Documents</h2>
-            {selectedFormat && (
-              <button className={styles.filterBadge} onClick={() => setSelectedFormat(null)}>
-                Filter: .{selectedFormat.toUpperCase()} <span className={styles.filterClear}>✕ Clear</span>
-              </button>
-            )}
-          </div>
-          {filteredDocs.length > 0 && (
-            <button className={styles.sectionAction} onClick={() => navigate('/analyze')}>
-              View all →
+          <h2 className={styles.sectionTitle}>Recent Documents</h2>
+
+          {/* Filter Pills */}
+          <div className={styles.filterBar}>
+            <button
+              className={`${styles.filterChip} ${selectedFormat === null ? styles.filterChipActive : ''}`}
+              onClick={() => setSelectedFormat(null)}
+            >
+              All Files ({state.documents.length})
             </button>
-          )}
+            {['pdf', 'pptx', 'docx', 'png'].map((fmt) => (
+              <button
+                key={fmt}
+                className={`${styles.filterChip} ${selectedFormat === fmt ? styles.filterChipActive : ''}`}
+                onClick={() => setSelectedFormat(selectedFormat === fmt ? null : fmt)}
+              >
+                .{fmt.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
+
         {filteredDocs.length === 0 ? (
-          <div
-            style={{
-              padding: '32px 24px',
-              textAlign: 'center',
-              backgroundColor: 'var(--bg-secondary)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--border)',
-            }}
-          >
-            <FileText size={32} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-            <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-              {selectedFormat ? `No .${selectedFormat.toUpperCase()} documents found` : 'No documents analyzed yet'}
-            </h3>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              {selectedFormat
-                ? `Click another format button below or clear the filter to see all files.`
-                : `Upload your first document (PDF, PNG, DOCX, TXT, PPTX) to parse layout, OCR text, and tables.`}
-            </p>
-            {selectedFormat ? (
-              <Button variant="secondary" onClick={() => setSelectedFormat(null)}>
-                Show All Formats
-              </Button>
-            ) : (
-              <Button variant="primary" onClick={() => navigate('/analyze')}>
-                <Upload size={16} />
-                Upload First Document
-              </Button>
-            )}
+          <div className={styles.emptyState}>
+            <CheckCircle2 size={32} style={{ color: 'var(--text-muted)' }} />
+            <div className={styles.emptyTitle}>No documents yet</div>
+            <div className={styles.emptySub}>
+              Upload a document to get started, or clear your filter.
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => setSelectedFormat(null)}>
+              Clear Filter
+            </Button>
           </div>
         ) : (
           <div className={styles.docGrid}>
             {filteredDocs.slice(0, 6).map((doc) => {
               const Icon = fileIcons[doc.type] ?? FileText;
               return (
-                <Card
+                <div
                   key={doc.id}
-                  interactive
+                  className={styles.docCard}
                   onClick={() => navigate(`/analyze?doc=${doc.id}`)}
                 >
-                  <CardBody className={styles.docCard}>
-                    <div className={styles.docCardTop}>
-                      <div className={styles.docIcon}>
-                        <Icon size={18} strokeWidth={1.5} />
-                      </div>
-                      <Badge status={doc.status} />
+                  <div className={styles.docCardTop}>
+                    <div className={styles.docIcon}>
+                      <Icon size={16} strokeWidth={1.8} />
                     </div>
-                    <div className={styles.docFilename}>{doc.filename}</div>
-                    <div className={styles.docMeta}>
-                      <span className={styles.docType}>{doc.type}</span>
-                      <span className={styles.docDot} />
-                      <span>{formatFileSize(doc.fileSize)}</span>
-                      <span className={styles.docDot} />
-                      <span>{formatRelativeDate(doc.uploadDate)}</span>
-                    </div>
-                  </CardBody>
-                </Card>
+                    <Badge status={doc.status} />
+                  </div>
+                  <div className={styles.docFilename} title={doc.filename}>
+                    {doc.filename}
+                  </div>
+                  <div className={styles.docMeta}>
+                    <span className={styles.docType}>{doc.type}</span>
+                    <span className={styles.docDot} />
+                    <span>{formatFileSize(doc.fileSize)}</span>
+                    <span className={styles.docDot} />
+                    <span>{formatRelativeDate(doc.uploadDate)}</span>
+                  </div>
+                </div>
               );
             })}
           </div>
         )}
       </div>
 
-      {/* Recent Jobs */}
+      {/* Processing Jobs Table */}
       <div className={styles.section}>
         <div className={styles.sectionHeader}>
-          <h2 className={styles.sectionTitle}>
-            Recent Processing Jobs {selectedFormat ? `(.${selectedFormat.toUpperCase()})` : ''}
-          </h2>
+          <h2 className={styles.sectionTitle}>Processing Jobs</h2>
+          {filteredJobs.length > 0 && (
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              {filteredJobs.length} job{filteredJobs.length > 1 ? 's' : ''}
+            </span>
+          )}
         </div>
+
         {filteredJobs.length === 0 ? (
-          <div
-            style={{
-              padding: '24px',
-              textAlign: 'center',
-              backgroundColor: 'var(--bg-secondary)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-muted)',
-              fontSize: 'var(--text-sm)',
-            }}
-          >
-            {selectedFormat ? `No recent processing jobs for .${selectedFormat.toUpperCase()} files.` : 'No active or recent processing jobs.'}
+          <div className={styles.emptyState}>
+            <div className={styles.emptyTitle}>No processing jobs</div>
+            <div className={styles.emptySub}>
+              Jobs will appear here when you upload and process files.
+            </div>
           </div>
         ) : (
           <Table
@@ -245,34 +309,6 @@ export default function Dashboard() {
             compact
           />
         )}
-      </div>
-
-      {/* Supported Formats */}
-      <div className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <h2 className={styles.sectionTitle}>Filter by Format</h2>
-          {selectedFormat && (
-            <button className={styles.sectionAction} onClick={() => setSelectedFormat(null)}>
-              Reset filter
-            </button>
-          )}
-        </div>
-        <div className={styles.formatsRow}>
-          {supportedFormats.map((fmt) => {
-            const isActive = selectedFormat === fmt.extension.toLowerCase();
-            return (
-              <button
-                key={fmt.extension}
-                className={`${styles.formatChip} ${isActive ? styles.formatChipActive : ''}`}
-                onClick={() => handleFormatClick(fmt.extension)}
-                title={`Click to filter dashboard by .${fmt.extension}`}
-              >
-                <span className={styles.formatExt}>{fmt.extension}</span>
-                <span className={styles.formatDesc}>{fmt.description}</span>
-              </button>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

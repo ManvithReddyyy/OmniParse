@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   Data Types & Core Engine Definitions — OmniParse IDP
+   Data Types & Core Definitions — OmniParse IDP
    ═══════════════════════════════════════════════════════════ */
 
 export type DocumentType = 'pdf' | 'docx' | 'pptx' | 'txt' | 'png' | 'jpg' | 'jpeg' | 'webp';
@@ -98,17 +98,6 @@ export interface TransformOutput {
   jsonTokens: number;
   plaintextTokens: number;
 }
-
-
-/* ── Real Dynamic Store Collections ─────────────────────── */
-
-export const mockDocuments: Document[] = [];
-
-export const mockJobs: ProcessingJob[] = [];
-
-export const mockAnalysis: Record<string, DocumentAnalysis> = {};
-
-export const mockTransforms: Record<string, TransformOutput> = {};
 
 
 /* ── Supported Formats ──────────────────────────────────── */

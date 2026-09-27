@@ -1,6 +1,16 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import JSZip from 'jszip';
-import { type DocumentAnalysis, type LayoutRegion, type TextBlock, type ReadingOrderItem, formatFileSize } from '../data/mock';
+import { ENGINE_CONFIG } from '../config/engine';
+import {
+  type DocumentAnalysis,
+  type LayoutRegion,
+  type TextBlock,
+  type ReadingOrderItem,
+  type ExtractedImage,
+  formatFileSize,
+} from '../data/mock';
+
+export type { ExtractedImage };
 
 // Set up PDF.js worker using unpkg CDN
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -251,6 +261,28 @@ export async function parseDocumentFile(file: File): Promise<string[]> {
     if (docxLines.length > 0) return docxLines;
   } else if (filename.endsWith('.txt') || filename.endsWith('.json') || filename.endsWith('.csv') || filename.endsWith('.md')) {
     return await extractPlainText(file);
+  } else if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif|svg)$/i.test(filename)) {
+    try {
+      const { Client, handle_file } = await import('@gradio/client');
+      const customUrl = typeof localStorage !== 'undefined' ? localStorage.getItem('omniparse_api_url') : null;
+      const target = (customUrl && customUrl.includes('hf.space')) ? customUrl : ENGINE_CONFIG.spaceTarget;
+      const client = await Client.connect(target);
+      const res = await client.predict('/gradio_ocr', {
+        img: typeof handle_file === 'function' ? handle_file(file) : file,
+      });
+      const raw = ((res.data as any)?.[0] as string) || '';
+      const lines = raw
+        .split('\n')
+        .map((l: string) => l.trim())
+        .filter((l: string) => l.length > 0 && l !== '[No text detected in image]');
+      if (lines.length > 0) {
+        return lines;
+      }
+      return [raw.trim() || '[No text detected in image]'];
+    } catch (e) {
+      console.warn('[OmniParse] parseDocumentFile Gradio OCR error:', e);
+      return ['[Error connecting to OCR engine: please check network]'];
+    }
   }
 
   const lines = await extractStringsFromFile(file);
@@ -393,6 +425,23 @@ export function createAnalysisFromLines(
   const wordCount = lines.join(' ').split(/\s+/).filter(Boolean).length;
   const pageCount = pageImages.length > 0 ? pageImages.length : Math.max(1, Math.ceil(lines.length / 25));
 
+  // Automatic Script & Language Detection
+  const sampleText = lines.slice(0, 60).join(' ');
+  let detectedLang = 'English';
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(sampleText)) {
+    detectedLang = 'Japanese';
+  } else if (/[\u4E00-\u9FFF]/.test(sampleText)) {
+    detectedLang = 'Chinese';
+  } else if (/[\u0900-\u097F]/.test(sampleText)) {
+    detectedLang = 'Hindi';
+  } else if (/[äöüßÄÖÜ]/.test(sampleText)) {
+    detectedLang = 'German';
+  } else if (/[éèêëàâîïôûùçÉÈÊËÀÂÎÏÔÛÙÇ]/.test(sampleText)) {
+    detectedLang = 'French';
+  } else if (/[áéíóúñ¿¡ÁÉÍÓÚÑ]/.test(sampleText)) {
+    detectedLang = 'Spanish';
+  }
+
   return {
     documentId: `doc-live-${Date.now()}`,
     layoutRegions,
@@ -401,7 +450,7 @@ export function createAnalysisFromLines(
     images: extractedImages,
     pageImages,
     metadata: {
-      language: 'English',
+      language: detectedLang,
       pages: pageCount,
       documentType: file.name.endsWith('.pdf')
         ? 'PDF Document'
@@ -419,3 +468,151 @@ export function createAnalysisFromLines(
     readingOrder,
   };
 }
+
+/**
+ * Generates AI-ready structured Markdown with extracted figures and diagrams embedded inline.
+ */
+export function generateMarkdownWithImages(
+  lines: string[],
+  images: ExtractedImage[],
+  filename: string
+): string {
+  const parts: string[] = [];
+  const assignedImageIds = new Set<string>();
+
+  const isImageFile = /\.(png|jpe?g|webp|bmp|gif|svg)$/i.test(filename);
+  if (isImageFile && images.length > 0) {
+    const mainImg = images[0];
+    assignedImageIds.add(mainImg.id);
+    parts.push(`# ${filename}`);
+    if (mainImg.url) {
+      parts.push(`![${mainImg.label}](${mainImg.url})\n\n*Visual Asset: ${mainImg.label} (${mainImg.width}×${mainImg.height})*`);
+    }
+    parts.push('## Extracted OCR Content');
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Check if line indicates a slide or page boundary (e.g., "Slide 1", "Page 2")
+    const slideMatch = line.match(/^(?:Slide|Page)\s+(\d+)/i);
+    if (slideMatch) {
+      const pageNum = parseInt(slideMatch[1], 10);
+      parts.push(`\n## ${line}`);
+
+      // Find any images associated with this slide or page
+      const matchingImgs = images.filter((img) => {
+        if (assignedImageIds.has(img.id)) return false;
+        const match = img.label.match(/(?:Slide|Page)\s+(\d+)/i);
+        return match && parseInt(match[1], 10) === pageNum;
+      });
+
+      for (const img of matchingImgs) {
+        assignedImageIds.add(img.id);
+        if (img.url) {
+          parts.push(`![${img.label}](${img.url})\n\n*Figure: ${img.label} (${img.width}×${img.height})*`);
+        }
+      }
+      continue;
+    }
+
+    if (i === 0 && !isImageFile) {
+      parts.push(`# ${line}`);
+    } else if (line.endsWith(':') || (line.length < 40 && line === line.toUpperCase() && line.length > 3)) {
+      parts.push(`### ${line}`);
+    } else {
+      parts.push(line);
+    }
+  }
+
+  // Any remaining unassigned embedded images (e.g. from DOCX or PDF without explicit slide labels)
+  const remainingImages = images.filter((img) => !assignedImageIds.has(img.id));
+  if (remainingImages.length > 0) {
+    parts.push('\n\n## Embedded Figures & Visual Assets\n');
+    for (const img of remainingImages) {
+      if (img.url) {
+        parts.push(`![${img.label}](${img.url})\n\n*Figure: ${img.label} (${img.width}×${img.height}, ${img.format})*`);
+      } else {
+        parts.push(`*Figure: ${img.label} (${img.width}×${img.height}, ${img.format})*`);
+      }
+    }
+  }
+
+  return parts.join('\n\n');
+}
+
+/**
+ * Generates structured JSON with OCR text lines, layout metadata, and embedded images.
+ */
+export function generateJsonWithImages(
+  lines: string[],
+  images: ExtractedImage[],
+  filename: string,
+  metadata: any
+): string {
+  return JSON.stringify(
+    {
+      document: filename,
+      detectedLanguage: metadata?.language || 'auto',
+      metadata,
+      extractedLines: lines,
+      images: images.map((img) => ({
+        id: img.id,
+        label: img.label,
+        dimensions: { width: img.width, height: img.height },
+        format: img.format,
+        size: img.size,
+        url: img.url,
+      })),
+      statistics: {
+        totalLines: lines.length,
+        totalImages: images.length,
+        wordCount: lines.join(' ').split(/\s+/).filter(Boolean).length,
+      },
+    },
+    null,
+    2
+  );
+}
+
+/**
+ * Generates plain text output with figure markers inline.
+ */
+export function generatePlainTextWithImages(
+  lines: string[],
+  images: ExtractedImage[]
+): string {
+  const textParts: string[] = [];
+  const assignedImageIds = new Set<string>();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    textParts.push(line);
+
+    const slideMatch = line.match(/^(?:Slide|Page)\s+(\d+)/i);
+    if (slideMatch) {
+      const pageNum = parseInt(slideMatch[1], 10);
+      const matchingImgs = images.filter((img) => {
+        if (assignedImageIds.has(img.id)) return false;
+        const match = img.label.match(/(?:Slide|Page)\s+(\d+)/i);
+        return match && parseInt(match[1], 10) === pageNum;
+      });
+
+      for (const img of matchingImgs) {
+        assignedImageIds.add(img.id);
+        textParts.push(`[Figure: ${img.label} (${img.width}×${img.height} ${img.format})]`);
+      }
+    }
+  }
+
+  const remaining = images.filter((img) => !assignedImageIds.has(img.id));
+  if (remaining.length > 0) {
+    textParts.push('\n--- EMBEDDED FIGURES ---');
+    for (const img of remaining) {
+      textParts.push(`[Figure: ${img.label} (${img.width}×${img.height} ${img.format})]`);
+    }
+  }
+
+  return textParts.join('\n');
+}
+

@@ -6,6 +6,7 @@ import Dashboard from '../pages/dashboard/dashboard';
 import Analyze from '../pages/analyze/analyze';
 import Transform from '../pages/transform/transform';
 import Settings from '../pages/settings/settings';
+import Developers from '../pages/developers/developers';
 
 import Login from '../pages/login/login';
 import Signup from '../pages/signup/signup';
@@ -53,6 +54,10 @@ export const router = createBrowserRouter([
               {
                 path: 'transform',
                 element: <Transform />,
+              },
+              {
+                path: 'api-keys',
+                element: <Developers />,
               },
               {
                 path: 'settings',

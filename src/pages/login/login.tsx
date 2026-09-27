@@ -1,6 +1,10 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';import { Link, useNavigate } from 'react-router-dom';
+import type { FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Hexagon, ArrowRight } from 'lucide-react';
 import { useAuth } from '../../context/auth-context';
+import Button from '../../components/ui/button';
+import styles from './auth.module.css';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,78 +17,82 @@ export default function Login() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-
     setError('');
     setLoading(true);
 
     try {
       await login(email, password);
       navigate('/');
-    } catch (error) {
-      setError(
-        error instanceof Error ? error.message : 'Login failed'
-      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-      }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          width: '100%',
-          maxWidth: '420px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-        }}
-      >
-        <div>
-          <h1>Welcome back</h1>
-          <p>Login to continue to OmniParse.</p>
+    <div className={styles.container}>
+      <div className={styles.card}>
+        <div className={styles.brand}>
+          <div className={styles.brandIcon}>
+            <Hexagon size={16} strokeWidth={2.5} />
+          </div>
+          <span className={styles.brandName}>OmniParse IDP</span>
         </div>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          required
-        />
-
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-        />
-
-        {error && (
-          <p style={{ color: 'red' }}>
-            {error}
+        <div>
+          <h1 className={styles.title}>Welcome back</h1>
+          <p className={styles.subtitle}>
+            Universal Intelligent Document Processing platform.
           </p>
-        )}
+        </div>
 
-        <button type="submit" disabled={loading}>
-          {loading ? 'Logging in...' : 'Login'}
-        </button>
+        {error && <div className={styles.error}>{error}</div>}
 
-        <p>
-          Don't have an account?{' '}
-          <Link to="/signup">Create one</Link>
-        </p>
-      </form>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <div className={styles.field}>
+            <label className={styles.label}>Email</label>
+            <input
+              type="email"
+              className={styles.input}
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label}>Password</label>
+            <input
+              type="password"
+              className={styles.input}
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <Button type="submit" variant="primary" size="md" disabled={loading}>
+            {loading ? 'Authenticating...' : 'Sign In'}
+            <ArrowRight size={14} />
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            onClick={() => navigate('/')}
+          >
+            Continue as Developer (Dev Mode)
+          </Button>
+        </form>
+
+        <div className={styles.footer}>
+          Don&apos;t have an account? <Link to="/signup">Create account</Link>
+        </div>
+      </div>
     </div>
   );
 }

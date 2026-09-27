@@ -89,18 +89,46 @@ function loadPersistedState(): Partial<AppState> {
 
 function savePersistedState(state: AppState) {
   try {
+    // Strip heavy base64 payloads to stay safely within localStorage 5MB quota
+    const sanitizedAnalysisStore: Record<string, Partial<DocumentAnalysis>> = {};
+    for (const [key, analysis] of Object.entries(state.analysisStore)) {
+      sanitizedAnalysisStore[key] = {
+        documentId: analysis.documentId,
+        metadata: analysis.metadata,
+        textBlocks: analysis.textBlocks,
+        layoutRegions: analysis.layoutRegions,
+        tables: analysis.tables,
+        readingOrder: analysis.readingOrder,
+        pageImages: [], // Don't persist full-page canvas base64 images in localStorage
+        images: (analysis.images || []).map((img) => ({
+          ...img,
+          // Strip data URLs longer than 500 chars to prevent quota exceeded
+          url: img.url && img.url.length > 500 ? '' : img.url,
+        })),
+      };
+    }
+
     const dataToSave = {
-      documents: state.documents,
-      analysisStore: state.analysisStore,
+      documents: state.documents.slice(0, 30),
+      analysisStore: sanitizedAnalysisStore,
       transformStore: state.transformStore,
-      jobs: state.jobs,
+      jobs: state.jobs.slice(0, 30),
       settings: state.settings,
     };
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
   } catch (err) {
-    console.warn('Failed to save state to localStorage:', err);
+    console.warn('LocalStorage save bypassed (quota or privacy):', err);
+    try {
+      // If quota exceeded, clear stale key and save minimal essential settings
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings: state.settings }));
+    } catch {
+      // Ignore
+    }
   }
 }
+
 
 /* ── Initial State ───────────────────────────────────────── */
 
@@ -111,7 +139,7 @@ const initialState: AppState = {
   activeDocument: persisted.documents && persisted.documents.length > 0 ? persisted.documents[0] : null,
   sidebarCollapsed: false,
   settings: persisted.settings || {
-    theme: 'dark',
+    theme: 'light',
     language: 'English',
     defaultOutputFormat: 'markdown',
     displayName: 'User',

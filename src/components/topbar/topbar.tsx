@@ -1,4 +1,5 @@
-import { Search, Bell, LogOut, User } from 'lucide-react';
+import { Search, Bell, LogOut, User, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/app-context';
 import { useAuth } from '../../context/auth-context';
 import Breadcrumbs from '../breadcrumbs/breadcrumbs';
@@ -6,16 +7,17 @@ import Dropdown from '../ui/dropdown';
 import styles from './topbar.module.css';
 
 export default function Topbar() {
+  const navigate = useNavigate();
   const { toggleCommandPalette, state } = useApp();
   const { user, logout } = useAuth();
 
-  const displayName = user?.name || state.settings.displayName || 'User';
+  const displayName = user?.name || state.settings.displayName || 'Developer';
 
   const userMenuItems = [
     {
       id: 'profile',
       label: displayName,
-      icon: <User size={16} />,
+      icon: <User size={15} />,
     },
     {
       id: 'sep',
@@ -25,27 +27,44 @@ export default function Topbar() {
     {
       id: 'logout',
       label: 'Sign out',
-      icon: <LogOut size={16} />,
+      icon: <LogOut size={15} />,
       onClick: logout,
     },
   ];
 
   return (
     <header className={styles.topbar}>
-      <Breadcrumbs />
+      <div className={styles.left}>
+        <Breadcrumbs />
+      </div>
 
       <div className={styles.center}>
         <button
           className={styles.searchTrigger}
           onClick={toggleCommandPalette}
+          title="Search documents, commands & actions"
         >
           <Search size={14} />
-          <span>Search…</span>
+          <span>Quick search or command…</span>
           <span className={styles.searchShortcut}>⌘K</span>
         </button>
       </div>
 
       <div className={styles.right}>
+        <div className={styles.statusPill} title="OCR API is online">
+          <span className={styles.statusDot} />
+          <span>API Online</span>
+        </div>
+
+        <button
+          className={styles.uploadActionBtn}
+          onClick={() => navigate('/analyze')}
+          title="Upload and analyze a new document"
+        >
+          <Plus size={14} strokeWidth={2.2} />
+          <span>Upload</span>
+        </button>
+
         <button
           className={styles.iconBtn}
           title="Notifications"
@@ -55,7 +74,7 @@ export default function Topbar() {
 
         <Dropdown
           trigger={
-            <div className={styles.avatar}>
+            <div className={styles.avatar} title={`Logged in as ${displayName}`}>
               {displayName.charAt(0).toUpperCase()}
             </div>
           }

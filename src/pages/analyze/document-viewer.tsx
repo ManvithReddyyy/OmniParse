@@ -18,7 +18,7 @@ interface SlideData {
   images: ExtractedImage[];
 }
 
-function extractSlidesFromAnalysis(analysis: DocumentAnalysis | null): SlideData[] {
+function extractSlidesFromAnalysis(analysis: DocumentAnalysis | null | undefined): SlideData[] {
   if (!analysis || !analysis.textBlocks || analysis.textBlocks.length === 0) return [];
 
   const slides: SlideData[] = [];
@@ -48,8 +48,8 @@ function extractSlidesFromAnalysis(analysis: DocumentAnalysis | null): SlideData
           images: [],
         };
         slides.push(currentSlide);
-      } else {
-        currentSlide.lines.push(text);
+      } else if (currentSlide) {
+        (currentSlide as SlideData).lines.push(text);
       }
     }
   }
