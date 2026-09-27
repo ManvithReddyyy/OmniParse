@@ -3,338 +3,452 @@ import {
   useContext,
   useEffect,
   useState,
+  useCallback,
   type ReactNode,
 } from 'react';
+import { supabase } from '../lib/supabase';
+import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
+
+// ── Types ──────────────────────────────────────────────
 
 export interface ApiKey {
   id: string;
   name: string;
   key: string;
-  createdAt: string;
-  lastUsed: string;
-  status: 'active' | 'revoked';
+  key_prefix: string;
+  status: 'active' | 'revoked' | 'expired';
+  scopes: string[];
+  last_used_at: string | null;
+  created_at: string;
 }
 
-export interface User {
+export interface Profile {
   id: string;
-  name: string;
+  display_name: string;
+  avatar_url: string | null;
+  role: 'super_admin' | 'admin' | 'member' | 'viewer';
+  tier: 'free' | 'starter' | 'pro' | 'enterprise';
+  monthly_limit: number;
+  monthly_usage: number;
+}
+
+export interface AppUser {
+  id: string;
   email: string;
-  apiKey: string;
-  tier: string;
+  name: string;
+  role: Profile['role'];
+  tier: Profile['tier'];
   monthlyUsage: number;
   monthlyLimit: number;
   keys: ApiKey[];
-  avatar?: string;
+  apiKey: string; // primary key for quick access
 }
 
 interface AuthContextType {
-  user: User | null;
-  token: string | null;
+  user: AppUser | null;
+  session: Session | null;
   loading: boolean;
+  token: string;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
-  createApiKey: (name: string) => ApiKey;
-  revokeApiKey: (id: string) => void;
-  recordApiUsage: () => void;
+  loginAsDev: () => void;
+  logout: () => Promise<void>;
+  createApiKey: (name: string) => Promise<ApiKey>;
+  revokeApiKey: (id: string) => Promise<void>;
+  recordApiUsage: (keyId?: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
-function generateId(prefix: string = 'op_live_'): string {
+// ── Helpers ────────────────────────────────────────────
+
+function generateApiKey(): string {
   const chars = 'abcdef0123456789';
-  let res = prefix;
-  for (let i = 0; i < 24; i++) {
-    res += chars.charAt(Math.floor(Math.random() * chars.length));
+  let key = 'op_live_';
+  for (let i = 0; i < 32; i++) {
+    key += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return res;
+  return key;
 }
 
-const DEFAULT_DEV_KEY = 'op_live_9f8a3c1e2b4d5e6f7a8b9c0d';
-
-const INITIAL_DEV_USER: User = {
-  id: 'usr_dev_001',
-  name: 'Developer',
-  email: 'dev@omniparse.local',
-  apiKey: DEFAULT_DEV_KEY,
-  tier: 'Developer Free Tier',
-  monthlyUsage: 0,
-  monthlyLimit: 10000,
+const DEV_USER: AppUser = {
+  id: '00000000-0000-0000-0000-000000000001',
+  email: 'admin@omniparse.local',
+  name: 'OmniParse Admin (Dev)',
+  role: 'super_admin',
+  tier: 'enterprise',
+  monthlyUsage: 18,
+  monthlyLimit: 100000,
   keys: [
     {
-      id: 'key_1',
-      name: 'Default Key',
-      key: DEFAULT_DEV_KEY,
-      createdAt: new Date().toISOString(),
-      lastUsed: 'Never',
+      id: 'key-dev-admin-master',
+      name: 'Master Production Key',
+      key: 'op_live_f893e1a0b92c478df88310bc931',
+      key_prefix: 'op_live_f893',
       status: 'active',
+      scopes: ['read', 'write', 'admin'],
+      last_used_at: new Date().toISOString(),
+      created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    },
+    {
+      id: 'key-dev-read-only',
+      name: 'ReadOnly Analytics',
+      key: 'op_live_a1b2c3d4e5f67890abcdef12345',
+      key_prefix: 'op_live_a1b2',
+      status: 'active',
+      scopes: ['read'],
+      last_used_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+      created_at: new Date(Date.now() - 86400000 * 20).toISOString(),
     },
   ],
+  apiKey: 'op_live_f893e1a0b92c478df88310bc931',
 };
+
+// ── Context ────────────────────────────────────────────
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Build AppUser from Supabase user + profile + keys
+  const buildAppUser = useCallback(async (supabaseUser: SupabaseUser): Promise<AppUser | null> => {
     try {
-      const stored = localStorage.getItem('omniparse_current_user');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Clean out any old mock data
-        if (parsed.keys && parsed.keys.length > 1 && parsed.keys[1]?.name === 'Mobile SDK Scanner') {
-          parsed.keys = [parsed.keys[0]];
-          parsed.monthlyUsage = 0;
-          parsed.keys[0].createdAt = new Date().toISOString();
-          parsed.keys[0].lastUsed = 'Never';
-        }
-        return parsed;
+      // Fetch profile safely using maybeSingle
+      let { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .maybeSingle();
+
+      // If profile does not exist yet (e.g. trigger delay), insert default
+      if (!profile) {
+        const { data: newProfile } = await supabase
+          .from('profiles')
+          .insert({
+            id: supabaseUser.id,
+            display_name: supabaseUser.user_metadata?.display_name || supabaseUser.email?.split('@')[0] || 'User',
+            role: 'super_admin', // First registered user default
+            tier: 'enterprise',
+          })
+          .select()
+          .maybeSingle();
+        profile = newProfile;
       }
-    } catch {
-      // fallback
+
+      // Fetch API keys
+      const { data: keys } = await supabase
+        .from('api_keys')
+        .select('*')
+        .eq('user_id', supabaseUser.id)
+        .order('created_at', { ascending: false });
+
+      const apiKeys: ApiKey[] = (keys || []).map((k: any) => ({
+        id: k.id,
+        name: k.name,
+        key: k.key_hash,
+        key_prefix: k.key_prefix,
+        status: k.status,
+        scopes: k.scopes || ['read', 'write'],
+        last_used_at: k.last_used_at,
+        created_at: k.created_at,
+      }));
+
+      // If user has no API keys yet, create a default one
+      if (apiKeys.length === 0) {
+        const rawKey = generateApiKey();
+        const keyPrefix = rawKey.substring(0, 12);
+        const { data: createdKey } = await supabase
+          .from('api_keys')
+          .insert({
+            user_id: supabaseUser.id,
+            name: 'Default Production Key',
+            key_prefix: keyPrefix,
+            key_hash: rawKey,
+            scopes: ['read', 'write'],
+            status: 'active',
+          })
+          .select()
+          .maybeSingle();
+
+        if (createdKey) {
+          apiKeys.push({
+            id: createdKey.id,
+            name: createdKey.name,
+            key: rawKey,
+            key_prefix: keyPrefix,
+            status: 'active',
+            scopes: createdKey.scopes || ['read', 'write'],
+            last_used_at: null,
+            created_at: createdKey.created_at,
+          });
+        }
+      }
+
+      const primaryKey = apiKeys.find(k => k.status === 'active');
+
+      return {
+        id: supabaseUser.id,
+        email: supabaseUser.email || '',
+        name: profile?.display_name || supabaseUser.email?.split('@')[0] || 'User',
+        role: profile?.role || 'super_admin',
+        tier: profile?.tier || 'enterprise',
+        monthlyUsage: profile?.monthly_usage || 0,
+        monthlyLimit: profile?.monthly_limit || 10000,
+        keys: apiKeys,
+        apiKey: primaryKey?.key || '',
+      };
+    } catch (err) {
+      console.error('Failed to build user profile:', err);
+      return null;
     }
-    return INITIAL_DEV_USER;
-  });
+  }, []);
 
-  const [token, setToken] = useState<string | null>(
-    localStorage.getItem('omniparse_token') || 'op_token_live'
-  );
-  const [loading, setLoading] = useState(false);
+  // Refresh user data from database
+  const refreshUser = useCallback(async () => {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    if (currentSession?.user) {
+      const appUser = await buildAppUser(currentSession.user);
+      setUser(appUser);
+    }
+  }, [buildAppUser]);
 
-  // Sync current user to localStorage
+  // Listen for auth state changes
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('omniparse_current_user', JSON.stringify(user));
-      localStorage.setItem('omniparse_api_key', user.apiKey);
-    } else {
-      localStorage.removeItem('omniparse_current_user');
-      localStorage.removeItem('omniparse_api_key');
-    }
-  }, [user]);
+    let mounted = true;
+
+    // Check dev bypass first
+    const isDevMode = localStorage.getItem('omniparse_dev_mode') === 'true';
+
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+      if (!mounted) return;
+      setSession(initialSession);
+      if (initialSession?.user) {
+        const appUser = await buildAppUser(initialSession.user);
+        if (mounted) setUser(appUser);
+      } else if (isDevMode) {
+        if (mounted) setUser(DEV_USER);
+      }
+      if (mounted) setLoading(false);
+    }).catch(() => {
+      if (mounted) {
+        if (isDevMode) setUser(DEV_USER);
+        setLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
+        if (!mounted) return;
+        setSession(newSession);
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          localStorage.removeItem('omniparse_dev_mode');
+          const appUser = await buildAppUser(newSession.user);
+          if (mounted) setUser(appUser);
+        } else if (event === 'SIGNED_OUT') {
+          if (localStorage.getItem('omniparse_dev_mode') === 'true') {
+            if (mounted) setUser(DEV_USER);
+          } else {
+            if (mounted) setUser(null);
+          }
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [buildAppUser]);
+
+  // ── Auth Actions ───────────────────────────────────
 
   const login = async (email: string, password: string) => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 400)); // Smooth UX transition
-
-    try {
-      // Check registered users in storage
-      const usersRaw = localStorage.getItem('omniparse_registered_users');
-      const users: Array<User & { password?: string }> = usersRaw ? JSON.parse(usersRaw) : [];
-
-      const found = users.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase().trim()
-      );
-
-      if (found) {
-        if (found.password && found.password !== password) {
-          throw new Error('Incorrect password');
-        }
-        const userObj: User = {
-          id: found.id,
-          name: found.name,
-          email: found.email,
-          apiKey: found.apiKey,
-          tier: found.tier || 'Developer Tier (Free)',
-          monthlyUsage: found.monthlyUsage || 0,
-          monthlyLimit: found.monthlyLimit || 10000,
-          keys: found.keys || [],
-        };
-        setUser(userObj);
-        setToken(`tok_${found.id}`);
-        localStorage.setItem('omniparse_token', `tok_${found.id}`);
-        return;
-      }
-
-      // Default demo login
-      if (email.toLowerCase().includes('dev') || email.toLowerCase().includes('admin')) {
-        setUser(INITIAL_DEV_USER);
-        setToken('tok_dev');
-        localStorage.setItem('omniparse_token', 'tok_dev');
-        return;
-      }
-
-      // Automatically create the account on first login for seamless onboarding
-      const newKey = generateId('op_live_');
-      const newUser: User = {
-        id: `usr_${Date.now()}`,
-        name: email.split('@')[0],
-        email: email.trim(),
-        apiKey: newKey,
-        tier: 'Developer Tier (Free)',
-        monthlyUsage: 0,
-        monthlyLimit: 10000,
-        keys: [
-          {
-            id: `key_${Date.now()}`,
-            name: 'Default Production Key',
-            key: newKey,
-            createdAt: new Date().toISOString(),
-            lastUsed: 'Never',
-            status: 'active',
-          },
-        ],
-      };
-
-      users.push({ ...newUser, password });
-      localStorage.setItem('omniparse_registered_users', JSON.stringify(users));
-
-      setUser(newUser);
-      setToken(`tok_${newUser.id}`);
-      localStorage.setItem('omniparse_token', `tok_${newUser.id}`);
-    } finally {
-      setLoading(false);
+    localStorage.removeItem('omniparse_dev_mode');
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error) throw new Error(error.message);
+    if (data.user) {
+      const appUser = await buildAppUser(data.user);
+      setUser(appUser);
     }
   };
 
   const signup = async (name: string, email: string, password: string) => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 450));
-
-    try {
-      const usersRaw = localStorage.getItem('omniparse_registered_users');
-      const users: Array<User & { password?: string }> = usersRaw ? JSON.parse(usersRaw) : [];
-
-      const existing = users.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase().trim()
-      );
-
-      if (existing) {
-        throw new Error('An account with this email already exists.');
-      }
-
-      const newKey = generateId('op_live_');
-      const newUser: User = {
-        id: `usr_${Date.now()}`,
-        name: name.trim(),
-        email: email.trim(),
-        apiKey: newKey,
-        tier: 'Developer Tier (Free)',
-        monthlyUsage: 0,
-        monthlyLimit: 10000,
-        keys: [
-          {
-            id: `key_${Date.now()}`,
-            name: 'Primary API Key',
-            key: newKey,
-            createdAt: new Date().toISOString(),
-            lastUsed: 'Just now',
-            status: 'active',
-          },
-        ],
-      };
-
-      users.push({ ...newUser, password });
-      localStorage.setItem('omniparse_registered_users', JSON.stringify(users));
-
-      setUser(newUser);
-      setToken(`tok_${newUser.id}`);
-      localStorage.setItem('omniparse_token', `tok_${newUser.id}`);
-    } finally {
-      setLoading(false);
+    localStorage.removeItem('omniparse_dev_mode');
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: { display_name: name.trim() },
+      },
+    });
+    if (error) throw new Error(error.message);
+    if (data.user) {
+      const appUser = await buildAppUser(data.user);
+      setUser(appUser);
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('omniparse_token');
-    localStorage.removeItem('omniparse_current_user');
-    setToken(null);
-    setUser(null);
+  const loginAsDev = () => {
+    localStorage.setItem('omniparse_dev_mode', 'true');
+    setUser(DEV_USER);
   };
 
-  const createApiKey = (keyName: string): ApiKey => {
+  const logout = async () => {
+    localStorage.removeItem('omniparse_dev_mode');
+    await supabase.auth.signOut().catch(() => {});
+    setUser(null);
+    setSession(null);
+  };
+
+  // ── API Key Management ─────────────────────────────
+
+  const createApiKey = async (name: string): Promise<ApiKey> => {
     if (!user) throw new Error('Not authenticated');
 
-    const newKeyStr = generateId('op_live_');
-    const newApiKey: ApiKey = {
-      id: `key_${Date.now()}`,
-      name: keyName.trim() || 'API Key',
-      key: newKeyStr,
-      createdAt: new Date().toISOString(),
-      lastUsed: 'Never',
+    const rawKey = generateApiKey();
+    const keyPrefix = rawKey.substring(0, 12);
+    const newKeyId = 'key_' + Math.random().toString(36).substring(2, 10);
+    const now = new Date().toISOString();
+
+    if (session?.user) {
+      const { data, error } = await supabase
+        .from('api_keys')
+        .insert({
+          user_id: session.user.id,
+          name: name.trim(),
+          key_prefix: keyPrefix,
+          key_hash: rawKey,
+          scopes: ['read', 'write'],
+          status: 'active',
+        })
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+
+      const newKey: ApiKey = {
+        id: data.id,
+        name: data.name,
+        key: rawKey,
+        key_prefix: keyPrefix,
+        status: 'active',
+        scopes: ['read', 'write'],
+        last_used_at: null,
+        created_at: data.created_at,
+      };
+
+      setUser(prev => prev ? {
+        ...prev,
+        keys: [newKey, ...prev.keys],
+        apiKey: prev.apiKey || rawKey,
+      } : null);
+
+      return newKey;
+    }
+
+    // Dev mode key creation
+    const newKey: ApiKey = {
+      id: newKeyId,
+      name: name.trim(),
+      key: rawKey,
+      key_prefix: keyPrefix,
       status: 'active',
+      scopes: ['read', 'write'],
+      last_used_at: null,
+      created_at: now,
     };
 
-    const updatedKeys = [newApiKey, ...(user.keys || [])];
-    const updatedUser: User = {
-      ...user,
-      keys: updatedKeys,
-    };
+    setUser(prev => prev ? {
+      ...prev,
+      keys: [newKey, ...prev.keys],
+      apiKey: prev.apiKey || rawKey,
+    } : null);
 
-    setUser(updatedUser);
-
-    // Sync to registered users in localStorage
-    const usersRaw = localStorage.getItem('omniparse_registered_users');
-    if (usersRaw) {
-      const users: User[] = JSON.parse(usersRaw);
-      const idx = users.findIndex((u) => u.id === user.id);
-      if (idx !== -1) {
-        users[idx].keys = updatedKeys;
-        localStorage.setItem('omniparse_registered_users', JSON.stringify(users));
-      }
-    }
-
-    return newApiKey;
+    return newKey;
   };
 
-  const revokeApiKey = (keyId: string) => {
+  const revokeApiKey = async (id: string) => {
     if (!user) return;
-    const updatedKeys = user.keys.map((k) =>
-      k.id === keyId ? { ...k, status: 'revoked' as const } : k
-    );
-    const updatedUser: User = {
-      ...user,
-      keys: updatedKeys,
-    };
-    setUser(updatedUser);
 
-    const usersRaw = localStorage.getItem('omniparse_registered_users');
-    if (usersRaw) {
-      const users: User[] = JSON.parse(usersRaw);
-      const idx = users.findIndex((u) => u.id === user.id);
-      if (idx !== -1) {
-        users[idx].keys = updatedKeys;
-        localStorage.setItem('omniparse_registered_users', JSON.stringify(users));
-      }
+    if (session?.user) {
+      const { error } = await supabase
+        .from('api_keys')
+        .update({ status: 'revoked' })
+        .eq('id', id)
+        .eq('user_id', session.user.id);
+
+      if (error) throw new Error(error.message);
     }
-  };
 
-  const recordApiUsage = (keyId?: string) => {
-    if (!user) return;
-    const updatedKeys = user.keys.map((k) => {
-      if (keyId ? k.id === keyId : k.status === 'active') {
-        return { ...k, lastUsed: 'Just now' };
-      }
-      return k;
+    setUser(prev => {
+      if (!prev) return null;
+      const updatedKeys = prev.keys.map(k =>
+        k.id === id ? { ...k, status: 'revoked' as const } : k
+      );
+      const activeKey = updatedKeys.find(k => k.status === 'active');
+      return { ...prev, keys: updatedKeys, apiKey: activeKey?.key || '' };
     });
+  };
 
-    const updatedUser = {
-      ...user,
-      monthlyUsage: (user.monthlyUsage || 0) + 1,
-      keys: updatedKeys,
-    };
-    setUser(updatedUser);
+  const recordApiUsage = async (keyId?: string) => {
+    if (!user) return;
 
-    const usersRaw = localStorage.getItem('omniparse_registered_users');
-    if (usersRaw) {
-      const users: User[] = JSON.parse(usersRaw);
-      const idx = users.findIndex((u) => u.id === user.id);
-      if (idx !== -1) {
-        users[idx].monthlyUsage = updatedUser.monthlyUsage;
-        users[idx].keys = updatedKeys;
-        localStorage.setItem('omniparse_registered_users', JSON.stringify(users));
+    if (session?.user) {
+      try {
+        await supabase.from('usage_logs').insert({
+          user_id: session.user.id,
+          api_key_id: keyId || null,
+          endpoint: '/v1/extract',
+          method: 'POST',
+          status_code: 200,
+        });
+
+        if (keyId) {
+          await supabase
+            .from('api_keys')
+            .update({ last_used_at: new Date().toISOString() })
+            .eq('id', keyId);
+        }
+
+        try {
+          await supabase.rpc('increment_usage', { user_uuid: session.user.id });
+        } catch {
+          await supabase
+            .from('profiles')
+            .update({ monthly_usage: (user.monthlyUsage || 0) + 1 })
+            .eq('id', session.user.id);
+        }
+      } catch (err) {
+        console.warn('Could not record usage in Supabase:', err);
       }
     }
+
+    // Update local state
+    setUser(prev => prev ? { ...prev, monthlyUsage: prev.monthlyUsage + 1 } : null);
   };
+
+  const token = session?.access_token || user?.apiKey || '';
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
+        session,
         loading,
+        token,
         login,
         signup,
+        loginAsDev,
         logout,
         createApiKey,
         revokeApiKey,
         recordApiUsage,
+        refreshUser,
       }}
     >
       {children}

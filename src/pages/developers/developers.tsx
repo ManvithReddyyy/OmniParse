@@ -67,11 +67,11 @@ export default function Developers() {
     setTimeout(() => setCopiedSnippet(false), 2000);
   };
 
-  const handleCreateKey = (e: React.FormEvent) => {
+  const handleCreateKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newKeyName.trim()) return;
     try {
-      const newKey = createApiKey(newKeyName.trim());
+      const newKey = await createApiKey(newKeyName.trim());
       setSelectedKeyId(newKey.id);
       addToast(`Generated new API key: ${newKeyName.trim()}`, 'success');
       setNewKeyName('');
@@ -380,7 +380,7 @@ export function DocumentScanner() {
                       </span>
                     </div>
                     <div className={styles.keyMeta}>
-                      Created {new Date(k.createdAt).toLocaleDateString()} • Last used: {k.lastUsed}
+                      Created {new Date(k.created_at).toLocaleDateString()} • Last used: {k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Never'}
                     </div>
                   </div>
 

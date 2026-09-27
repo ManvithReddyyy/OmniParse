@@ -8,7 +8,7 @@ import styles from './auth.module.css';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, loginAsDev } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,6 +28,11 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDevLogin = () => {
+    loginAsDev();
+    navigate('/');
   };
 
   return (
@@ -83,7 +88,7 @@ export default function Login() {
             type="button"
             variant="secondary"
             size="md"
-            onClick={() => navigate('/')}
+            onClick={handleDevLogin}
           >
             Continue as Developer (Dev Mode)
           </Button>

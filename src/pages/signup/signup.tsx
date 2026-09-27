@@ -8,18 +8,20 @@ import styles from '../login/auth.module.css';
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { signup } = useAuth();
+  const { signup, loginAsDev } = useAuth();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+    setSuccessMsg('');
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -29,12 +31,18 @@ export default function Signup() {
     setLoading(true);
     try {
       await signup(name, email, password);
-      navigate('/');
+      setSuccessMsg('Account created successfully! Redirecting...');
+      setTimeout(() => navigate('/'), 1200);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDevLogin = () => {
+    loginAsDev();
+    navigate('/');
   };
 
   return (
@@ -55,6 +63,19 @@ export default function Signup() {
         </div>
 
         {error && <div className={styles.error}>{error}</div>}
+        {successMsg && (
+          <div style={{
+            background: 'var(--color-success-bg, rgba(16, 185, 129, 0.12))',
+            color: 'var(--color-success, #10b981)',
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-md, 8px)',
+            fontSize: '13px',
+            marginBottom: '16px',
+            border: '1px solid rgba(16, 185, 129, 0.3)'
+          }}>
+            {successMsg}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.field}>
@@ -114,7 +135,7 @@ export default function Signup() {
             type="button"
             variant="secondary"
             size="md"
-            onClick={() => navigate('/')}
+            onClick={handleDevLogin}
           >
             Continue as Developer (Dev Mode)
           </Button>

@@ -173,7 +173,7 @@ function omniparseApiServerPlugin(): Plugin {
                     `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(line)}`
                   );
                   if (gRes.ok) {
-                    const gData = await gRes.json();
+                    const gData = (await gRes.json()) as any;
                     translated.push(gData[0]?.map((item: any) => item[0]).join('') || line);
                   } else {
                     translated.push(line);
