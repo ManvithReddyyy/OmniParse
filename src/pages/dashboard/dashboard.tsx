@@ -11,6 +11,8 @@ import {
   Key,
   Copy,
   Code2,
+  Trash2,
+  Cloud,
 } from 'lucide-react';
 import { useApp } from '../../context/app-context';
 import { useAuth } from '../../context/auth-context';
@@ -38,7 +40,7 @@ const fileIcons: Record<string, React.ElementType> = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { state } = useApp();
+  const { state, deleteDocument, isSyncing } = useApp();
   const { user } = useAuth();
   const { addToast } = useToast();
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
@@ -89,13 +91,38 @@ export default function Dashboard() {
       key: 'actions',
       header: '',
       render: (row: ProcessingJob) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(`/analyze?doc=${row.documentId}`)}
-        >
-          View &rarr;
-        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(`/analyze?doc=${row.documentId}`)}
+          >
+            View &rarr;
+          </Button>
+          <button
+            type="button"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              padding: '6px',
+              borderRadius: 'var(--radius-sm)',
+              display: 'inline-flex',
+              alignItems: 'center',
+            }}
+            title="Delete document"
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (window.confirm(`Delete "${row.documentName}"?`)) {
+                await deleteDocument(row.documentId);
+                addToast(`Deleted ${row.documentName}`, 'info');
+              }
+            }}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       ),
     },
   ];
@@ -110,6 +137,12 @@ export default function Dashboard() {
           </h1>
           <p className={styles.date}>
             {today} • Welcome{user?.name ? `, ${user.name}` : ''}
+            {isSyncing && (
+              <span style={{ marginLeft: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-primary)', fontSize: '11px' }}>
+                <Cloud size={13} />
+                <span>Syncing cloud docs…</span>
+              </span>
+            )}
           </p>
         </div>
 

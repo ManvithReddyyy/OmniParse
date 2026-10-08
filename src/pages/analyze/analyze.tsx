@@ -6,21 +6,14 @@ import { useApp } from '../../context/app-context';
 import { ENGINE_CONFIG } from '../../config/engine';
 import {
   getFileExtension,
-  type Document,
   type DocumentAnalysis,
-  type DocumentType,
-  type TransformOutput,
-  type ProcessingJob,
   type ExtractedImage,
 } from '../../data/mock';
 import {
   parseDocumentFile,
-  createAnalysisFromLines,
   extractEmbeddedImagesFromFile,
-  generateMarkdownWithImages,
-  generateJsonWithImages,
-  generatePlainTextWithImages,
 } from '../../utils/document-parser';
+import { persistDocument } from '../../lib/documents';
 import UploadZone from '../../components/upload/upload-zone';
 import DocumentViewer from './document-viewer';
 import Inspector from './inspector';
@@ -32,7 +25,7 @@ type Mode = 'upload' | 'workspace';
 
 export default function Analyze() {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { user, session, recordApiUsage } = useAuth();
   const [searchParams] = useSearchParams();
   const { state, addDocument, setActiveDocument } = useApp();
   const [mode, setMode] = useState<Mode>('upload');
@@ -71,51 +64,29 @@ export default function Analyze() {
         images = await extractEmbeddedImagesFromFile(file);
       }
 
-      const liveAnalysis = createAnalysisFromLines(lines, file, images, pageImages);
-      const docId = 'doc-' + Date.now();
+      const isRealSession = Boolean(session?.user);
+      const userId = session?.user?.id || user?.id;
 
-      const ext = (getFileExtension(file.name) || 'pdf') as DocumentType;
-      const liveDoc: Document = {
-        id: docId,
-        filename: file.name,
-        type: ext,
-        status: 'completed',
-        uploadDate: new Date().toISOString(),
-        fileSize: file.size,
-        pages: liveAnalysis.metadata.pages,
-      };
-
-      const markdownText = generateMarkdownWithImages(lines, images, file.name);
-      const jsonText = generateJsonWithImages(lines, images, file.name, liveAnalysis.metadata);
-      const plainText = generatePlainTextWithImages(lines, images);
-      const approxTokens = Math.round(plainText.length / 4);
-
-      const liveTransform: TransformOutput = {
-        documentId: docId,
-        markdown: markdownText,
-        json: jsonText,
-        plaintext: plainText,
-        originalTokens: approxTokens * 2,
-        markdownTokens: Math.round(approxTokens * 0.75),
-        jsonTokens: Math.round(approxTokens * 1.25),
-        plaintextTokens: approxTokens,
-      };
-
-      const liveJob: ProcessingJob = {
-        id: 'job-' + Date.now(),
-        documentId: docId,
-        documentName: file.name,
-        status: 'completed',
-        started: new Date().toISOString(),
-        duration: `${durationSec.toFixed(1)}s`,
-        outputFormat: 'markdown',
-      };
+      const { document: liveDoc, analysis: liveAnalysis, transform: liveTransform, job: liveJob } =
+        await persistDocument({
+          file,
+          lines,
+          durationSec,
+          backendImages: images,
+          pageImages,
+          userId,
+          isRealSession,
+        });
 
       addDocument(liveDoc, liveAnalysis, liveTransform, liveJob);
       setAnalysis(liveAnalysis);
       setIsExtracting(false);
+
+      if (recordApiUsage) {
+        recordApiUsage().catch(console.error);
+      }
     },
-    [addDocument]
+    [addDocument, session, user, recordApiUsage]
   );
 
   const executeOcr = useCallback(
@@ -220,7 +191,7 @@ export default function Analyze() {
         elapsedSec
       );
     },
-    [finishProcessing, token]
+    [finishProcessing]
   );
 
   const handleFileSelect = useCallback(

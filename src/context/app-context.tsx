@@ -1,4 +1,12 @@
-import { createContext, useContext, useReducer, type ReactNode, useCallback } from 'react';
+import {
+  createContext,
+  useContext,
+  useReducer,
+  useState,
+  useEffect,
+  type ReactNode,
+  useCallback,
+} from 'react';
 import {
   type Document,
   type OutputFormat,
@@ -6,6 +14,11 @@ import {
   type TransformOutput,
   type ProcessingJob,
 } from '../data/mock';
+import { useAuth } from './auth-context';
+import {
+  fetchUserDocumentsFromCloud,
+  deleteDocumentFromCloud,
+} from '../lib/documents';
 
 /* ── Types ──────────────────────────────────────────────── */
 
@@ -38,6 +51,16 @@ type AppAction =
         job?: ProcessingJob;
       };
     }
+  | {
+      type: 'SET_CLOUD_DOCUMENTS';
+      payload: {
+        documents: Document[];
+        analysisStore: Record<string, DocumentAnalysis>;
+        transformStore: Record<string, TransformOutput>;
+        jobs: ProcessingJob[];
+      };
+    }
+  | { type: 'REMOVE_DOCUMENT'; payload: { id: string } }
   | { type: 'SET_ACTIVE_DOCUMENT'; payload: Document | null }
   | { type: 'UPDATE_DOCUMENT_STATUS'; payload: { id: string; status: Document['status'] } }
   | { type: 'TOGGLE_SIDEBAR' }
@@ -49,12 +72,15 @@ type AppAction =
 interface AppContextType {
   state: AppState;
   dispatch: React.Dispatch<AppAction>;
+  isSyncing: boolean;
   addDocument: (
     doc: Document,
     analysis?: DocumentAnalysis,
     transform?: TransformOutput,
     job?: ProcessingJob
   ) => void;
+  deleteDocument: (id: string) => Promise<boolean>;
+  refreshCloudDocuments: () => Promise<void>;
   setActiveDocument: (doc: Document | null) => void;
   updateDocumentStatus: (id: string, status: Document['status']) => void;
   toggleSidebar: () => void;
@@ -99,10 +125,9 @@ function savePersistedState(state: AppState) {
         layoutRegions: analysis.layoutRegions,
         tables: analysis.tables,
         readingOrder: analysis.readingOrder,
-        pageImages: [], // Don't persist full-page canvas base64 images in localStorage
+        pageImages: [],
         images: (analysis.images || []).map((img) => ({
           ...img,
-          // Strip data URLs longer than 500 chars to prevent quota exceeded
           url: img.url && img.url.length > 500 ? '' : img.url,
         })),
       };
@@ -120,7 +145,6 @@ function savePersistedState(state: AppState) {
   } catch (err) {
     console.warn('LocalStorage save bypassed (quota or privacy):', err);
     try {
-      // If quota exceeded, clear stale key and save minimal essential settings
       localStorage.removeItem(STORAGE_KEY);
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings: state.settings }));
     } catch {
@@ -128,7 +152,6 @@ function savePersistedState(state: AppState) {
     }
   }
 }
-
 
 /* ── Initial State ───────────────────────────────────────── */
 
@@ -165,6 +188,33 @@ function appReducer(state: AppState, action: AppAction): AppState {
         analysisStore: analysis ? { ...state.analysisStore, [doc.id]: analysis } : state.analysisStore,
         transformStore: transform ? { ...state.transformStore, [doc.id]: transform } : state.transformStore,
         jobs: job ? [job, ...state.jobs.filter((j) => j.id !== job.id)] : state.jobs,
+      };
+      break;
+    }
+    case 'SET_CLOUD_DOCUMENTS': {
+      const { documents, analysisStore, transformStore, jobs } = action.payload;
+      const existingIds = new Set(documents.map((d) => d.id));
+      const localOnly = state.documents.filter((d) => !existingIds.has(d.id));
+      const mergedDocs = [...documents, ...localOnly];
+      nextState = {
+        ...state,
+        documents: mergedDocs,
+        activeDocument: state.activeDocument || mergedDocs[0] || null,
+        analysisStore: { ...state.analysisStore, ...analysisStore },
+        transformStore: { ...state.transformStore, ...transformStore },
+        jobs: [...jobs, ...state.jobs.filter((j) => !existingIds.has(j.documentId))],
+      };
+      break;
+    }
+    case 'REMOVE_DOCUMENT': {
+      const docId = action.payload.id;
+      const remainingDocs = state.documents.filter((d) => d.id !== docId);
+      const nextActive = state.activeDocument?.id === docId ? remainingDocs[0] || null : state.activeDocument;
+      nextState = {
+        ...state,
+        documents: remainingDocs,
+        activeDocument: nextActive,
+        jobs: state.jobs.filter((j) => j.documentId !== docId),
       };
       break;
     }
@@ -208,6 +258,26 @@ const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const { session } = useAuth();
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Sync documents from Supabase when user has an active session
+  const refreshCloudDocuments = useCallback(async () => {
+    if (!session?.user?.id) return;
+    setIsSyncing(true);
+    try {
+      const cloudData = await fetchUserDocumentsFromCloud(session.user.id);
+      if (cloudData.documents.length > 0) {
+        dispatch({ type: 'SET_CLOUD_DOCUMENTS', payload: cloudData });
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    refreshCloudDocuments();
+  }, [refreshCloudDocuments]);
 
   const addDocument = useCallback(
     (
@@ -219,6 +289,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'ADD_DOCUMENT', payload: { document: doc, analysis, transform, job } });
     },
     []
+  );
+
+  const deleteDocument = useCallback(
+    async (id: string): Promise<boolean> => {
+      dispatch({ type: 'REMOVE_DOCUMENT', payload: { id } });
+      if (session?.user?.id) {
+        return await deleteDocumentFromCloud(id, session.user.id);
+      }
+      return true;
+    },
+    [session?.user?.id]
   );
 
   const setActiveDocument = useCallback((doc: Document | null) => {
@@ -254,7 +335,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         state,
         dispatch,
+        isSyncing,
         addDocument,
+        deleteDocument,
+        refreshCloudDocuments,
         setActiveDocument,
         updateDocumentStatus,
         toggleSidebar,

@@ -12,19 +12,14 @@ import Login from '../pages/login/login';
 import Signup from '../pages/signup/signup';
 
 import ProtectedRoute from './ProtectedRoute';
-import { AuthProvider } from '../context/auth-context';
 
-function AuthLayout() {
-  return (
-    <AuthProvider>
-      <Outlet />
-    </AuthProvider>
-  );
+function RootLayout() {
+  return <Outlet />;
 }
 
 export const router = createBrowserRouter([
   {
-    element: <AuthLayout />,
+    element: <RootLayout />,
     children: [
       {
         path: '/login',
