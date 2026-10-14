@@ -3,14 +3,14 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
 }
 
 .inspectorContent {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-4) var(--space-5);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
 }
 
 .emptyState {
@@ -75,7 +75,7 @@
 }
 
 .viewToggleBtnActive {
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   color: var(--text-primary);
   font-weight: var(--weight-semibold);
   box-shadow: var(--shadow-xs);
@@ -89,7 +89,7 @@
   font-size: 11px;
   font-weight: var(--weight-medium);
   color: var(--text-secondary);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -159,17 +159,17 @@
 .ocrConfidencePill {
   font-size: 10px;
   font-weight: var(--weight-medium);
-  color: #15803D;
-  background-color: #DCFCE7;
+  color: var(--status-success);
+  background-color: var(--status-success-bg);
   padding: 2px 8px;
   border-radius: 12px;
-  border: 1px solid #BBF7D0;
+  border: 1px solid var(--status-success-border);
 }
 
 /* Document Reading / Formatted View */
 .documentDocView {
   padding: var(--space-5);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
@@ -232,7 +232,7 @@
 .inlineFigureImgWrapper {
   width: 100%;
   max-height: 320px;
-  background-color: #FAFAFA;
+  background-color: var(--bg-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -252,7 +252,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border-top: 1px solid var(--border-subtle);
   font-size: 11px;
 }
@@ -321,7 +321,7 @@
 .textBlock {
   padding: var(--space-3);
   margin-bottom: var(--space-2);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   display: flex;
@@ -368,7 +368,7 @@
   gap: var(--space-3);
   padding: 10px 12px;
   margin-bottom: var(--space-2);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
@@ -473,7 +473,7 @@
 }
 
 .imageCard {
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -490,7 +490,7 @@
 
 .imagePreviewWrapper {
   height: 130px;
-  background-color: #FAFAFA;
+  background-color: var(--bg-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -510,7 +510,7 @@
 .imageInfo {
   padding: 8px 10px;
   border-top: 1px solid var(--border-subtle);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -573,7 +573,7 @@
   display: flex;
   justify-content: space-between;
   padding: 9px 12px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   font-size: var(--text-xs);
 }
 
@@ -594,7 +594,7 @@
   gap: var(--space-3);
   padding: 8px 12px;
   margin-bottom: var(--space-2);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }

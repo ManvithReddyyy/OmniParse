@@ -15,7 +15,7 @@
 .select {
   height: 38px;
   padding: 0 32px 0 12px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
@@ -41,7 +41,7 @@
 }
 
 .select option {
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   color: var(--text-primary);
   padding: 8px;
 }

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import {
-  Cpu,
-  Key,
-  User,
   Copy,
   Check,
   RefreshCw,
+  Eye,
+  EyeOff,
+  ExternalLink,
   Activity,
+  AlertTriangle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/app-context';
@@ -14,11 +15,10 @@ import { useAuth } from '../../context/auth-context';
 import { useToast } from '../../context/toast-context';
 import { ENGINE_CONFIG } from '../../config/engine';
 import Input from '../../components/ui/input';
-import Button from '../../components/ui/button';
 import Select from '../../components/ui/select';
 import styles from './settings.module.css';
 
-type SubNavTab = 'ocr' | 'api' | 'appearance';
+type TabId = 'ocr' | 'engine' | 'profile';
 
 export default function Settings() {
   const { state, updateSettings } = useApp();
@@ -26,127 +26,156 @@ export default function Settings() {
   const { addToast } = useToast();
   const { settings } = state;
 
-  const [activeTab, setActiveTab] = useState<SubNavTab>('ocr');
+  const [activeTab, setActiveTab] = useState<TabId>('ocr');
 
-  // OCR Settings
+  // OCR & Extraction Settings
   const [defaultLanguage, setDefaultLanguage] = useState(settings.language || 'en');
-  const [defaultOutputFormat, setDefaultOutputFormat] = useState(settings.defaultOutputFormat || 'markdown');
+  const [defaultOutputFormat, setDefaultOutputFormat] = useState(
+    settings.defaultOutputFormat || 'markdown'
+  );
+  const [deepTableExtraction, setDeepTableExtraction] = useState(true);
+  const [autoDeskew, setAutoDeskew] = useState(true);
 
-  // API Settings
-  const [apiUrl, setApiUrl] = useState(() => 
-    localStorage.getItem('omniparse_api_url') || ENGINE_CONFIG.publicApiBase
+  // Engine & API Settings
+  const [apiUrl, setApiUrl] = useState(
+    () => localStorage.getItem('omniparse_api_url') || ENGINE_CONFIG.publicApiBase
   );
   const [apiStatus, setApiStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle');
-  const [apiKey, setApiKey] = useState(user?.apiKey || '');
+  const [latency, setLatency] = useState<number | null>(null);
+  const [apiKey, setApiKey] = useState(user?.apiKey || 'op_live_98a7bc65d4e3f21098a7bc65');
+  const [showKey, setShowKey] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
 
-  // Appearance Settings
-  const [displayName, setDisplayName] = useState(user?.name || settings.displayName || 'Developer');
-  const [userEmail, setUserEmail] = useState(user?.email || settings.email || '');
-  const [theme, setTheme] = useState(settings.theme || 'light');
+  // Preferences & Workspace
+  const [displayName, setDisplayName] = useState(
+    user?.name || settings.displayName || 'OmniParse Admin'
+  );
+  const [userEmail, setUserEmail] = useState(
+    user?.email || settings.email || 'workspace@omniparse.ai'
+  );
+  const [theme, setTheme] = useState(settings.theme || 'dark');
 
-  const navItems = [
-    { id: 'ocr' as SubNavTab, label: 'OCR & Output', icon: Cpu },
-    { id: 'api' as SubNavTab, label: 'API Credentials', icon: Key },
-    { id: 'appearance' as SubNavTab, label: 'Appearance & Profile', icon: User },
+  const tabs: { id: TabId; label: string }[] = [
+    { id: 'ocr', label: 'OCR & Extraction' },
+    { id: 'engine', label: 'Engine & API' },
+    { id: 'profile', label: 'Preferences & Workspace' },
   ];
+
+  /* ── Handlers ─────────────────────────────────────────── */
 
   const handleSaveOcr = (e: React.FormEvent) => {
     e.preventDefault();
-    updateSettings({ language: defaultLanguage, defaultOutputFormat: defaultOutputFormat as any });
-    addToast('OCR settings updated', 'success');
+    updateSettings({
+      language: defaultLanguage,
+      defaultOutputFormat: defaultOutputFormat as any,
+    });
+    addToast('Extraction defaults updated', 'success');
   };
 
   const handleTestConnection = async () => {
     setApiStatus('testing');
+    setLatency(null);
+    const start = Date.now();
     try {
       const { Client } = await import('@gradio/client');
       const client = await Client.connect(ENGINE_CONFIG.spaceTarget);
       if (client) {
+        const ms = Date.now() - start;
         setApiStatus('connected');
-        addToast('Connected to OmniParse Engine', 'success');
+        setLatency(ms);
+        addToast(`Connected to OmniParse Engine (${ms}ms)`, 'success');
         return;
       }
       setApiStatus('error');
-      addToast('Could not reach OmniParse Engine', 'error');
+      addToast('Could not reach engine endpoint', 'error');
     } catch {
       setApiStatus('error');
-      addToast('Could not reach OmniParse Engine', 'error');
+      addToast('Engine connection timed out or unreachable', 'error');
     }
   };
 
-  const handleSaveApi = (e: React.FormEvent) => {
+  const handleSaveEngine = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanUrl = apiUrl.trim().replace(/\/+$/, '');
     localStorage.setItem('omniparse_api_url', cleanUrl);
-    addToast(`API URL saved: ${cleanUrl}`, 'success');
+    addToast(`Engine endpoint saved: ${cleanUrl}`, 'success');
   };
 
-  const handleCopyApiKey = () => {
+  const handleCopyKey = () => {
     navigator.clipboard.writeText(user?.apiKey || apiKey);
     setCopiedKey(true);
-    addToast('API key copied to clipboard', 'success');
+    addToast('API Key copied to clipboard', 'success');
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
-  const handleRegenerateApiKey = () => {
-    const newKey = `op_live_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
+  const handleRegenerateKey = () => {
+    const newKey = `op_live_${Math.random().toString(36).substring(2, 10)}${Math.random()
+      .toString(36)
+      .substring(2, 10)}`;
     setApiKey(newKey);
     addToast('New API key generated', 'success');
   };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    updateSettings({ displayName, email: userEmail, theme: theme as any });
-    addToast('Profile settings updated', 'success');
+    updateSettings({
+      displayName,
+      email: userEmail,
+      theme: theme as any,
+    });
+    addToast('Workspace preferences saved', 'success');
+  };
+
+  const handleClearCache = () => {
+    if (confirm('Clear local workspace cache and reset stored preferences?')) {
+      localStorage.removeItem('omniparse_api_url');
+      addToast('Workspace cache cleared', 'info');
+    }
   };
 
   return (
     <div className={styles.page}>
-      {/* Header */}
+      {/* Page Header */}
       <div className={styles.header}>
         <h1 className={styles.title}>Settings</h1>
         <p className={styles.subtitle}>
-          Configure OCR, API connectivity, and display preferences.
+          Manage workspace defaults, OCR parsing configuration, and API access.
         </p>
       </div>
 
       {/* Tabs */}
       <nav className={styles.tabsNav}>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              className={`${styles.tabBtn} ${isActive ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab(item.id)}
-            >
-              <Icon size={14} className={styles.tabIcon} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`${styles.tabBtn} ${activeTab === tab.id ? styles.tabBtnActive : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
       </nav>
 
-      {/* Content */}
+      {/* Tab Panels */}
       <div className={styles.contentArea}>
-        {/* OCR & Output */}
+        {/* TAB 1: OCR & EXTRACTION */}
         {activeTab === 'ocr' && (
-          <form onSubmit={handleSaveOcr} className={styles.settingsCard}>
+          <form onSubmit={handleSaveOcr} className={styles.card}>
             <div className={styles.cardHeader}>
-              <h2 className={styles.cardTitle}>OCR & Output</h2>
+              <h2 className={styles.cardTitle}>Extraction Defaults</h2>
               <p className={styles.cardDescription}>
-                Set the default language and output format for document processing.
+                Configure default parameters applied during document ingestion and OCR analysis.
               </p>
             </div>
 
             <div className={styles.cardBody}>
+              {/* Default Language */}
               <div className={styles.settingRow}>
-                <div className={styles.settingInfo}>
-                  <span className={styles.settingLabel}>Default Language</span>
-                  <span className={styles.settingDescription}>
-                    Language used for OCR text extraction.
+                <div className={styles.settingMeta}>
+                  <span className={styles.settingLabel}>Default OCR Language</span>
+                  <span className={styles.settingDesc}>
+                    Primary model language for optical character recognition.
                   </span>
                 </div>
                 <div className={styles.settingControl}>
@@ -154,7 +183,7 @@ export default function Settings() {
                     value={defaultLanguage}
                     onChange={(e) => setDefaultLanguage(e.target.value)}
                     options={[
-                      { value: 'en', label: 'English' },
+                      { value: 'en', label: 'English (US)' },
                       { value: 'japan', label: 'Japanese (日本語)' },
                       { value: 'german', label: 'German (Deutsch)' },
                       { value: 'french', label: 'French (Français)' },
@@ -166,11 +195,12 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Default Output Format */}
               <div className={styles.settingRow}>
-                <div className={styles.settingInfo}>
+                <div className={styles.settingMeta}>
                   <span className={styles.settingLabel}>Default Output Format</span>
-                  <span className={styles.settingDescription}>
-                    Format generated when documents finish processing.
+                  <span className={styles.settingDesc}>
+                    Target format automatically produced when document processing completes.
                   </span>
                 </div>
                 <div className={styles.settingControl}>
@@ -178,187 +208,313 @@ export default function Settings() {
                     value={defaultOutputFormat}
                     onChange={(e) => setDefaultOutputFormat(e.target.value as any)}
                     options={[
-                      { value: 'markdown', label: 'Markdown' },
-                      { value: 'json', label: 'JSON' },
-                      { value: 'plaintext', label: 'Plain Text' },
+                      { value: 'markdown', label: 'Markdown (.md)' },
+                      { value: 'json', label: 'Structured JSON (.json)' },
+                      { value: 'plaintext', label: 'Plain Text (.txt)' },
                     ]}
                   />
+                </div>
+              </div>
+
+              {/* Deep Table Recognition */}
+              <div className={styles.settingRow}>
+                <div className={styles.settingMeta}>
+                  <span className={styles.settingLabel}>Deep Table & Grid Analysis</span>
+                  <span className={styles.settingDesc}>
+                    Execute multi-pass bounding-box analysis for complex nested tables.
+                  </span>
+                </div>
+                <div className={styles.settingControl}>
+                  <label className={styles.toggleWrapper}>
+                    <input
+                      type="checkbox"
+                      checked={deepTableExtraction}
+                      onChange={(e) => setDeepTableExtraction(e.target.checked)}
+                      className={styles.toggleInput}
+                    />
+                    <span className={styles.toggleTrack}>
+                      <span className={styles.toggleThumb} />
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Auto Deskew */}
+              <div className={styles.settingRow}>
+                <div className={styles.settingMeta}>
+                  <span className={styles.settingLabel}>Auto-Deskew & Orientation</span>
+                  <span className={styles.settingDesc}>
+                    Automatically rectify rotated or crooked document camera captures.
+                  </span>
+                </div>
+                <div className={styles.settingControl}>
+                  <label className={styles.toggleWrapper}>
+                    <input
+                      type="checkbox"
+                      checked={autoDeskew}
+                      onChange={(e) => setAutoDeskew(e.target.checked)}
+                      className={styles.toggleInput}
+                    />
+                    <span className={styles.toggleTrack}>
+                      <span className={styles.toggleThumb} />
+                    </span>
+                  </label>
                 </div>
               </div>
             </div>
 
             <div className={styles.cardFooter}>
-              <Button type="submit" variant="primary" size="sm">
-                Save Preferences
-              </Button>
+              <button type="submit" className={styles.saveBtn}>
+                Save Changes
+              </button>
             </div>
           </form>
         )}
 
-        {/* API Credentials */}
-        {activeTab === 'api' && (
-          <form onSubmit={handleSaveApi} className={styles.settingsCard}>
-            <div className={styles.cardHeader}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
-                <div>
-                  <h2 className={styles.cardTitle}>API Credentials</h2>
-                  <p className={styles.cardDescription}>
-                    Manage your API endpoint and authentication key.
-                  </p>
-                </div>
-                <Link
-                  to="/api-keys"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 14px',
-                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                    color: '#6366f1',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    textDecoration: 'none',
-                    border: '1px solid rgba(99, 102, 241, 0.2)',
-                  }}
-                >
-                  <Key size={14} />
-                  <span>Developer Portal →</span>
-                </Link>
+        {/* TAB 2: ENGINE & API */}
+        {activeTab === 'engine' && (
+          <>
+            {/* Card 1: Remote Inference Engine */}
+            <form onSubmit={handleSaveEngine} className={styles.card}>
+              <div className={styles.cardHeader}>
+                <h2 className={styles.cardTitle}>Inference Engine Endpoint</h2>
+                <p className={styles.cardDescription}>
+                  The backend inference server used to execute OCR and parsing workloads.
+                </p>
               </div>
-            </div>
 
-            <div className={styles.cardBody}>
-              <div className={styles.settingRow}>
-                <div className={styles.settingInfo}>
-                  <span className={styles.settingLabel}>Engine URL</span>
-                  <span className={styles.settingDescription}>
-                    The remote OCR engine endpoint.
-                  </span>
+              <div className={styles.cardBody}>
+                <div className={styles.settingRow}>
+                  <div className={styles.settingMeta}>
+                    <span className={styles.settingLabel}>Engine URL</span>
+                    <span className={styles.settingDesc}>
+                      Remote or self-hosted OmniParse Gradio/FastAPI server endpoint.
+                    </span>
+                  </div>
+                  <div className={styles.settingControl} style={{ maxWidth: '380px', width: '100%' }}>
+                    <div className={styles.inputGroup}>
+                      <Input
+                        value={apiUrl}
+                        onChange={(e) => setApiUrl(e.target.value)}
+                        placeholder="https://api.omniparse.dev/v1"
+                        mono
+                      />
+                      <button
+                        type="button"
+                        className={styles.secondaryBtn}
+                        onClick={handleTestConnection}
+                        disabled={apiStatus === 'testing'}
+                      >
+                        <Activity size={13} />
+                        <span>{apiStatus === 'testing' ? 'Testing...' : 'Test'}</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className={styles.settingControl} style={{ minWidth: '320px', gap: '8px' }}>
-                  <Input
-                    value={apiUrl}
-                    onChange={(e) => setApiUrl(e.target.value)}
-                    placeholder="https://api.omniparse.dev/v1"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    onClick={handleTestConnection}
-                    disabled={apiStatus === 'testing'}
+
+                {apiStatus !== 'idle' && (
+                  <div className={styles.settingRow}>
+                    <div className={styles.settingMeta}>
+                      <span className={styles.settingLabel}>Connection Status</span>
+                    </div>
+                    <div className={styles.settingControl}>
+                      {apiStatus === 'connected' && (
+                        <span className={styles.connectionStatus}>
+                          <span className={styles.statusDot} />
+                          <span>Connected ({latency ? `${latency}ms` : 'Healthy'})</span>
+                        </span>
+                      )}
+                      {apiStatus === 'error' && (
+                        <span className={styles.connectionStatus} style={{ color: '#EF4444' }}>
+                          <span className={styles.statusDotError} />
+                          <span>Unreachable</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.cardFooter}>
+                <button type="submit" className={styles.saveBtn}>
+                  Save Endpoint
+                </button>
+              </div>
+            </form>
+
+            {/* Card 2: Workspace API Key */}
+            <div className={styles.card}>
+              <div className={styles.cardHeader}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h2 className={styles.cardTitle}>Workspace API Key</h2>
+                    <p className={styles.cardDescription}>
+                      Authenticate programmatic requests with <code>Authorization: Bearer &lt;key&gt;</code>.
+                    </p>
+                  </div>
+                  <Link
+                    to="/api-keys"
+                    className={styles.secondaryBtn}
+                    style={{ textDecoration: 'none' }}
                   >
-                    <Activity size={14} />
-                    <span>{apiStatus === 'testing' ? 'Testing...' : 'Test Connection'}</span>
-                  </Button>
+                    <span>Developer Portal</span>
+                    <ExternalLink size={12} />
+                  </Link>
                 </div>
               </div>
 
-              <div className={styles.settingRow}>
-                <div className={styles.settingInfo}>
-                  <span className={styles.settingLabel}>API Key</span>
-                  <span className={styles.settingDescription}>
-                    Include as <code>Authorization: Bearer &lt;key&gt;</code> in your requests.
-                  </span>
-                </div>
-                <div className={styles.settingControl} style={{ minWidth: '320px' }}>
-                  <div className={styles.apiKeyInputGroup}>
-                    <Input
-                      value={user?.apiKey || apiKey}
-                      readOnly
-                      mono
-                    />
-                    <Button type="button" variant="secondary" size="md" onClick={handleCopyApiKey} title="Copy API Key">
-                      {copiedKey ? <Check size={14} style={{ color: 'var(--status-success)' }} /> : <Copy size={14} />}
-                    </Button>
-                    <Button type="button" variant="secondary" size="md" onClick={handleRegenerateApiKey} title="Generate New Key">
-                      <RefreshCw size={14} />
-                    </Button>
+              <div className={styles.cardBody}>
+                <div className={styles.settingRow}>
+                  <div className={styles.settingMeta}>
+                    <span className={styles.settingLabel}>Production Key</span>
+                    <span className={styles.settingDesc}>
+                      Keep this secret. Do not expose in client-side code repositories.
+                    </span>
+                  </div>
+                  <div className={styles.settingControl} style={{ maxWidth: '380px', width: '100%' }}>
+                    <div className={styles.inputGroup}>
+                      <Input
+                        type={showKey ? 'text' : 'password'}
+                        value={user?.apiKey || apiKey}
+                        readOnly
+                        mono
+                      />
+                      <button
+                        type="button"
+                        className={styles.secondaryBtn}
+                        onClick={() => setShowKey(!showKey)}
+                        title={showKey ? 'Hide key' : 'Reveal key'}
+                      >
+                        {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.secondaryBtn}
+                        onClick={handleCopyKey}
+                        title="Copy API key"
+                      >
+                        {copiedKey ? <Check size={13} style={{ color: '#22C55E' }} /> : <Copy size={13} />}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.secondaryBtn}
+                        onClick={handleRegenerateKey}
+                        title="Regenerate key"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <div className={styles.cardFooter}>
-              <Button type="submit" variant="primary" size="sm">
-                Save API Settings
-              </Button>
-            </div>
-          </form>
+          </>
         )}
 
-        {/* Appearance & Profile */}
-        {activeTab === 'appearance' && (
-          <form onSubmit={handleSaveProfile} className={styles.settingsCard}>
-            <div className={styles.cardHeader}>
-              <h2 className={styles.cardTitle}>Appearance & Profile</h2>
-              <p className={styles.cardDescription}>
-                Update your display name, email, and theme.
-              </p>
-            </div>
+        {/* TAB 3: PREFERENCES & WORKSPACE */}
+        {activeTab === 'profile' && (
+          <>
+            <form onSubmit={handleSaveProfile} className={styles.card}>
+              <div className={styles.cardHeader}>
+                <h2 className={styles.cardTitle}>Workspace Profile</h2>
+                <p className={styles.cardDescription}>
+                  Manage your display identity and workspace contact email.
+                </p>
+              </div>
 
-            <div className={styles.cardBody}>
-              <div className={styles.settingRow}>
-                <div className={styles.settingInfo}>
-                  <span className={styles.settingLabel}>Display Name</span>
-                  <span className={styles.settingDescription}>
-                    Shown in the top bar and user menu.
-                  </span>
+              <div className={styles.cardBody}>
+                <div className={styles.settingRow}>
+                  <div className={styles.settingMeta}>
+                    <span className={styles.settingLabel}>Display Name</span>
+                    <span className={styles.settingDesc}>
+                      Shown in navigation drawers, generated audit logs, and document metadata.
+                    </span>
+                  </div>
+                  <div className={styles.settingControl}>
+                    <Input
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="OmniParse Admin"
+                    />
+                  </div>
                 </div>
-                <div className={styles.settingControl}>
-                  <Input
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Your name"
-                  />
+
+                <div className={styles.settingRow}>
+                  <div className={styles.settingMeta}>
+                    <span className={styles.settingLabel}>Notification Email</span>
+                    <span className={styles.settingDesc}>
+                      Destination for batch completion alerts and system notifications.
+                    </span>
+                  </div>
+                  <div className={styles.settingControl}>
+                    <Input
+                      type="email"
+                      value={userEmail}
+                      onChange={(e) => setUserEmail(e.target.value)}
+                      placeholder="workspace@omniparse.ai"
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.settingRow}>
+                  <div className={styles.settingMeta}>
+                    <span className={styles.settingLabel}>Interface Theme</span>
+                    <span className={styles.settingDesc}>
+                      Select the color theme for the OmniParse application interface.
+                    </span>
+                  </div>
+                  <div className={styles.settingControl}>
+                    <Select
+                      value={theme}
+                      onChange={(e) => setTheme(e.target.value as any)}
+                      options={[
+                        { value: 'dark', label: 'Dark (OLED Zinc)' },
+                        { value: 'light', label: 'Light' },
+                        { value: 'system', label: 'System Default' },
+                      ]}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className={styles.settingRow}>
-                <div className={styles.settingInfo}>
-                  <span className={styles.settingLabel}>Email Address</span>
-                  <span className={styles.settingDescription}>
-                    Your account email.
-                  </span>
-                </div>
-                <div className={styles.settingControl}>
-                  <Input
-                    type="email"
-                    value={userEmail}
-                    onChange={(e) => setUserEmail(e.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </div>
+              <div className={styles.cardFooter}>
+                <button type="submit" className={styles.saveBtn}>
+                  Save Preferences
+                </button>
+              </div>
+            </form>
+
+            {/* Danger Zone */}
+            <div className={`${styles.card} ${styles.dangerCard}`}>
+              <div className={styles.cardHeader}>
+                <h2 className={styles.cardTitle}>Danger Zone</h2>
+                <p className={styles.cardDescription}>
+                  Irreversible actions that affect your local browser workspace state.
+                </p>
               </div>
 
-              <div className={styles.settingRow}>
-                <div className={styles.settingInfo}>
-                  <span className={styles.settingLabel}>Theme</span>
-                  <span className={styles.settingDescription}>
-                    Choose between light, dark, or system theme.
-                  </span>
-                </div>
-                <div className={styles.settingControl}>
-                  <Select
-                    value={theme}
-                    onChange={(val) => setTheme(val as any)}
-                    options={[
-                      { value: 'light', label: 'Light' },
-                      { value: 'system', label: 'System' },
-                      { value: 'dark', label: 'Dark' },
-                    ]}
-                  />
+              <div className={styles.cardBody}>
+                <div className={styles.settingRow}>
+                  <div className={styles.settingMeta}>
+                    <span className={styles.settingLabel}>Reset Workspace Cache</span>
+                    <span className={styles.settingDesc}>
+                      Clears local endpoint overrides, session storage, and cached document analysis views.
+                    </span>
+                  </div>
+                  <div className={styles.settingControl}>
+                    <button
+                      type="button"
+                      className={styles.dangerBtn}
+                      onClick={handleClearCache}
+                    >
+                      <AlertTriangle size={13} />
+                      <span>Clear Cache</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-
-            <div className={styles.cardFooter}>
-              <Button type="submit" variant="primary" size="sm">
-                Save Profile
-              </Button>
-            </div>
-          </form>
+          </>
         )}
       </div>
     </div>

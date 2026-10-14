@@ -1,5 +1,5 @@
 .card {
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
@@ -31,7 +31,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
 }
 
 .headerTitle {
@@ -47,7 +47,7 @@
 
 .body {
   padding: var(--space-5);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
 }
 
 .footer {

@@ -10,7 +10,7 @@
 .card {
   width: 100%;
   max-width: 400px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 32px;
@@ -35,7 +35,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #FFFFFF;
+  color: var(--primary-fg);
   box-shadow: var(--shadow-xs);
 }
 
@@ -83,7 +83,7 @@
 .input {
   height: 38px;
   padding: 0 12px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);

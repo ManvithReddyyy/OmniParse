@@ -20,42 +20,42 @@
 }
 
 .completed {
-  color: #15803D;
-  background-color: #F0FDF4;
-  border-color: #BBF7D0;
+  color: var(--status-success);
+  background-color: var(--status-success-bg);
+  border-color: var(--status-success-border);
 }
-.completed .dot { background-color: #16A34A; }
+.completed .dot { background-color: var(--status-success); }
 
 .processing {
-  color: #6D28D9;
-  background-color: #F5F3FF;
-  border-color: #DDD6FE;
+  color: var(--status-processing);
+  background-color: var(--status-processing-bg);
+  border-color: var(--status-processing-border);
 }
 .processing .dot {
-  background-color: #7C3AED;
+  background-color: var(--status-processing);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
 .pending {
-  color: #475569;
-  background-color: #F8FAFC;
-  border-color: #E2E8F0;
+  color: var(--text-secondary);
+  background-color: var(--bg-subtle);
+  border-color: var(--border);
 }
-.pending .dot { background-color: #94A3B8; }
+.pending .dot { background-color: var(--text-muted); }
 
 .error {
-  color: #B91C1C;
-  background-color: #FEF2F2;
-  border-color: #FECACA;
+  color: var(--status-error);
+  background-color: var(--status-error-bg);
+  border-color: var(--status-error-border);
 }
-.error .dot { background-color: #DC2626; }
+.error .dot { background-color: var(--status-error); }
 
 .info {
-  color: #1D4ED8;
-  background-color: #EFF6FF;
-  border-color: #BFDBFE;
+  color: var(--status-info);
+  background-color: var(--status-info-bg);
+  border-color: var(--status-info-border);
 }
-.info .dot { background-color: #2563EB; }
+.info .dot { background-color: var(--status-info); }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }

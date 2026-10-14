@@ -38,3 +38,10 @@ venv/
 .env.*
 !.env.example
 
+# Documents & Presentations
+*.pptx
+
+# Tool outputs
+repomix-output.*
+repomix*
+

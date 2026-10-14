@@ -10,14 +10,14 @@
   text-align: center;
   cursor: pointer;
   transition: all var(--transition-normal);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   position: relative;
   box-shadow: var(--shadow-xs);
 }
 
 .zone:hover {
   border-color: var(--accent);
-  background-color: #FFFFFF;
+  background-color: var(--bg-hover);
   box-shadow: var(--shadow-sm);
 }
 

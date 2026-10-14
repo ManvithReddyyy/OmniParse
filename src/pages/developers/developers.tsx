@@ -271,11 +271,6 @@ export function DocumentScanner() {
             Manage API keys and integrate OmniParse into your apps with the code snippets below.
           </p>
         </div>
-
-        <div className={styles.statusPill}>
-          <span className={styles.pulseDot} />
-          <span>Engine Online</span>
-        </div>
       </div>
 
       {/* Stats Row — only real data */}

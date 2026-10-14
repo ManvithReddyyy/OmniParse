@@ -161,12 +161,12 @@ const initialState: AppState = {
   documents: persisted.documents || [],
   activeDocument: persisted.documents && persisted.documents.length > 0 ? persisted.documents[0] : null,
   sidebarCollapsed: false,
-  settings: persisted.settings || {
-    theme: 'light',
-    language: 'English',
-    defaultOutputFormat: 'markdown',
-    displayName: 'User',
-    email: 'user@omniparse.dev',
+  settings: {
+    theme: persisted.settings?.theme === 'light' ? 'dark' : (persisted.settings?.theme || 'dark'),
+    language: persisted.settings?.language || 'English',
+    defaultOutputFormat: persisted.settings?.defaultOutputFormat || 'markdown',
+    displayName: persisted.settings?.displayName || 'User',
+    email: persisted.settings?.email || 'user@omniparse.dev',
   },
   commandPaletteOpen: false,
   analysisStore: persisted.analysisStore || {},

@@ -323,9 +323,9 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   padding: 4px 10px;
   border-radius: var(--radius-sm);
   font-size: 12px;
@@ -337,7 +337,7 @@
 }
 
 .codeCopyBtn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bg-active);
 }
 
 /* Endpoints Table */
@@ -364,8 +364,8 @@
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-fg);
 }
 
 .endpointPath {

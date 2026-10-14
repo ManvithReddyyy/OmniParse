@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   height: calc(100vh - var(--topbar-height));
-  background-color: #FFFFFF;
+  background-color: var(--bg-primary);
   animation: fadeIn var(--transition-normal) forwards;
   overflow: hidden;
 }
@@ -21,7 +21,7 @@
 .uploadWrapper {
   width: 100%;
   max-width: 620px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: var(--space-8);
@@ -94,7 +94,7 @@
 .inspectorPanel {
   flex: 1;
   min-width: 360px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -107,7 +107,7 @@
   justify-content: space-between;
   padding: 0 var(--space-6);
   border-bottom: 1px solid var(--border);
-  background-color: #FFFFFF;
+  background-color: var(--bg-secondary);
   flex-shrink: 0;
   height: 44px;
   box-shadow: var(--shadow-xs);

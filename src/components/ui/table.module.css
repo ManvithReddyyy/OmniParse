@@ -2,7 +2,7 @@
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   box-shadow: var(--shadow-xs);
 }
 
@@ -33,7 +33,7 @@
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-subtle);
   white-space: nowrap;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
 }
 
 .table tbody tr:last-child td {
@@ -49,7 +49,7 @@
 }
 
 .striped tbody tr:nth-child(even) td {
-  background-color: #FAFAFA;
+  background-color: var(--bg-subtle);
 }
 
 .striped tbody tr:nth-child(even):hover td {

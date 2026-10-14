@@ -14,7 +14,7 @@
 .palette {
   width: 90%;
   max-width: 580px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
@@ -28,7 +28,7 @@
   gap: var(--space-3);
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
 }
 
 .inputWrapper svg {
@@ -54,7 +54,7 @@
   max-height: 380px;
   overflow-y: auto;
   padding: 6px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
 }
 
 .section {
@@ -147,7 +147,7 @@
 .footerHint kbd {
   font-size: 10px;
   padding: 1px 5px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--text-secondary);

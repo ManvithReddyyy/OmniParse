@@ -12,7 +12,7 @@
   overflow-x: auto;
   scrollbar-width: none;
   flex-shrink: 0;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   padding: 0 var(--space-2);
 }
 
@@ -71,7 +71,7 @@
   padding: var(--space-4);
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
 }
 
 .tabContent::-webkit-scrollbar {

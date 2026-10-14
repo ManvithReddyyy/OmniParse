@@ -164,23 +164,23 @@ export default function Dashboard() {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '16px 20px',
-        backgroundColor: 'var(--bg-surface)',
+        backgroundColor: 'var(--bg-card)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',
         flexWrap: 'wrap',
         gap: '14px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        boxShadow: 'var(--shadow-xs)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{
             width: '40px',
             height: '40px',
             borderRadius: 'var(--radius-md)',
-            backgroundColor: 'rgba(99, 102, 241, 0.12)',
+            backgroundColor: 'var(--accent-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#6366f1',
+            color: 'var(--accent)',
           }}>
             <Key size={20} />
           </div>

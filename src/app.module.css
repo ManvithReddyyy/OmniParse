@@ -2,6 +2,7 @@
   display: flex;
   height: 100vh;
   overflow: hidden;
+  background-color: #0D0D0D;
 }
 
 .main {
@@ -10,6 +11,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background-color: var(--bg-primary, #0A0A0A);
   transition: margin-left var(--transition-normal);
 }
 

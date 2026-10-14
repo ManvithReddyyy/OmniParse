@@ -62,7 +62,7 @@
 .stepCompleted .stepIcon {
   background-color: var(--status-success);
   border-color: var(--status-success);
-  color: #FFFFFF;
+  color: var(--primary-fg);
 }
 
 .stepCompleted .stepLine {
