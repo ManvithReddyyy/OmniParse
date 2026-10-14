@@ -8,9 +8,6 @@ import {
   Presentation,
   ArrowRight,
   CheckCircle2,
-  Key,
-  Copy,
-  Code2,
   Trash2,
   Cloud,
 } from 'lucide-react';
@@ -158,69 +155,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* API Key Quick Card */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 20px',
-        backgroundColor: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-lg)',
-        flexWrap: 'wrap',
-        gap: '14px',
-        boxShadow: 'var(--shadow-xs)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: 'var(--radius-md)',
-            backgroundColor: 'var(--accent-subtle)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--accent)',
-          }}>
-            <Key size={20} />
-          </div>
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>Your API Key:</span>
-              <code style={{ backgroundColor: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
-                {user?.apiKey ? `${user.apiKey.substring(0, 10)}••••••••••••` : 'op_live_••••••••'}
-              </code>
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Use this key to connect your apps and scripts to the OmniParse API.
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              if (user?.apiKey) {
-                navigator.clipboard.writeText(user.apiKey);
-                addToast('API Key copied to clipboard', 'success');
-              }
-            }}
-          >
-            <Copy size={13} />
-            <span>Copy Key</span>
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => navigate('/api-keys')}
-          >
-            <Code2 size={13} />
-            <span>API Docs →</span>
-          </Button>
-        </div>
-      </div>
 
       {/* Upload Banner */}
       <div className={styles.dropzoneBanner}>
