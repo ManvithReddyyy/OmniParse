@@ -40,7 +40,7 @@ except ImportError:
     HAS_RICH = False
     console = None
 
-DEFAULT_BACKEND_URL = os.environ.get("OMNIPARSE_URL", "http://localhost:7860")
+DEFAULT_BACKEND_URL = os.environ.get("OMNIPARSE_URL", "https://manvithreddy-omniparse-backend.hf.space")
 
 LANG_MAP = {
     "eng": "en",
@@ -81,7 +81,7 @@ def print_banner():
         banner = Panel(
             "[bold white]OmniParse CLI[/bold white] [dim]v0.1.0-beta[/dim]\n"
             "[bold #818CF8]Universal IDP & Multilingual OCR Platform[/bold #818CF8]\n"
-            "[dim]Powered by PaddleOCR v3.7 • PyMuPDF • Deep Translator[/dim]",
+            "[dim]Powered by OmniParse Vision v3.0 (Indra OCR + PyMuPDF4LLM)[/dim]",
             border_style="#818CF8",
             expand=False,
             padding=(0, 2),
@@ -270,7 +270,7 @@ def interactive_mode(backend_url=DEFAULT_BACKEND_URL):
             # Process document file path
             if os.path.exists(cmd):
                 if HAS_RICH:
-                    with console.status(f"[bold cyan]⠋ Processing {os.path.basename(cmd)} via PaddleOCR ({current_lang})...[/bold cyan]"):
+                    with console.status(f"[bold cyan]⠋ Processing {os.path.basename(cmd)} via OmniParse Vision v3.0 (Indra OCR + PyMuPDF4LLM) ({current_lang})...[/bold cyan]"):
                         lines, elapsed = process_document(cmd, ocr_lang=current_lang, target_lang=target_lang, backend_url=backend_url)
                 else:
                     print(f"Processing {cmd}...")
@@ -360,7 +360,7 @@ def main():
         sys.exit(1)
 
     if HAS_RICH and args.output in ["stdout", "-"]:
-        with console.status(f"[bold cyan]⠋ Analyzing {os.path.basename(args.input_file)} via PaddleOCR ({ocr_lang})...[/bold cyan]"):
+        with console.status(f"[bold cyan]⠋ Analyzing {os.path.basename(args.input_file)} via OmniParse Vision v3.0 (Indra OCR + PyMuPDF4LLM) ({ocr_lang})...[/bold cyan]"):
             lines, elapsed = process_document(args.input_file, ocr_lang=ocr_lang, target_lang=args.translate, backend_url=args.backend)
     else:
         lines, elapsed = process_document(args.input_file, ocr_lang=ocr_lang, target_lang=args.translate, backend_url=args.backend)

@@ -24,7 +24,7 @@ const mainNavItems = [
 ];
 
 export default function Sidebar() {
-  const { state, toggleSidebar } = useApp();
+  const { state, toggleSidebar, toggleCommandPalette } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -62,7 +62,7 @@ export default function Sidebar() {
 
         {/* Quick Search Input Pill */}
         {!state.sidebarCollapsed ? (
-          <div className={styles.searchBox} onClick={() => navigate('/analyze')}>
+          <div className={styles.searchBox} onClick={toggleCommandPalette}>
             <Search size={13} className={styles.searchIcon} />
             <span className={styles.searchPlaceholder}>Search anything</span>
             <kbd className={styles.searchKbd}>⌘K</kbd>
@@ -71,7 +71,7 @@ export default function Sidebar() {
           <button
             type="button"
             className={styles.collapsedSearchBtn}
-            onClick={() => navigate('/analyze')}
+            onClick={toggleCommandPalette}
             title="Search anything (⌘K)"
           >
             <Search size={15} />

@@ -7,6 +7,7 @@ import {
   Settings,
   FileText,
   Upload,
+  Key,
 } from 'lucide-react';
 import { useApp } from '../../context/app-context';
 import styles from './command-palette.module.css';
@@ -61,6 +62,13 @@ export default function CommandPalette() {
       icon: <Settings size={16} />,
       section: 'Pages',
       action: () => { navigate('/settings'); close(); },
+    },
+    {
+      id: 'api-keys',
+      label: 'Go to API Keys & Docs',
+      icon: <Key size={16} />,
+      section: 'Pages',
+      action: () => { navigate('/api-keys'); close(); },
     },
     {
       id: 'upload',
