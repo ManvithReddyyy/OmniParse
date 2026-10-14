@@ -32,6 +32,8 @@ export interface SaveDocumentParams {
   pageImages?: string[];
   userId?: string;
   isRealSession?: boolean;
+  blocks?: any[];
+  tables?: any[];
 }
 
 export interface SaveDocumentResult {
@@ -56,13 +58,15 @@ export async function persistDocument(params: SaveDocumentParams): Promise<SaveD
     pageImages = [],
     userId,
     isRealSession = false,
+    blocks = [],
+    tables = [],
   } = params;
 
   const docUuid = generateUuid();
   const fileExt = (file.name.split('.').pop()?.toLowerCase() || 'pdf') as DocumentType;
 
   // 1. Build Client Analysis & Transforms
-  const analysis = createAnalysisFromLines(lines, file, backendImages, pageImages);
+  const analysis = createAnalysisFromLines(lines, file, backendImages, pageImages, blocks, tables);
   analysis.documentId = docUuid;
 
   const markdownText = generateMarkdownWithImages(lines, backendImages, file.name);

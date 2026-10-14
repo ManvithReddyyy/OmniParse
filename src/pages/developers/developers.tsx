@@ -10,11 +10,7 @@ import {
   Code2,
   Terminal,
   FileCode,
-  Zap,
   Activity,
-  Layers,
-  Sparkles,
-  Upload,
 } from 'lucide-react';
 import { useAuth } from '../../context/auth-context';
 import { useToast } from '../../context/toast-context';
@@ -24,8 +20,78 @@ import styles from './developers.module.css';
 
 type SnippetLang = 'curl' | 'python' | 'javascript' | 'react';
 
+function highlightCodeLine(line: string): React.ReactNode {
+  const trimmed = line.trim();
+  if (trimmed.startsWith('//') || (trimmed.startsWith('#') && !trimmed.startsWith('#!'))) {
+    return <span style={{ color: '#52525b', fontStyle: 'italic' }}>{line}</span>;
+  }
+
+  const tokenRegex =
+    /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:import|from|export|function|return|const|let|var|async|await|with|as|print|curl|requests|fetch|new|def|class|true|false|null)\b|(?:\-X|\-H|\-F|\bPOST\b|\bheaders\b|\bbody\b|\bmethod\b|\bFormData\b)|(?:op_live_[a-zA-Z0-9_\-\.]+))/g;
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenRegex.exec(line)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(line.substring(lastIndex, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith('"') || token.startsWith("'")) {
+      parts.push(
+        <span key={match.index} style={{ color: '#e4e4e7' }}>
+          {token}
+        </span>
+      );
+    } else if (token.startsWith('op_live_')) {
+      parts.push(
+        <span
+          key={match.index}
+          style={{
+            color: '#f4f4f5',
+            background: '#18181b',
+            padding: '1px 5px',
+            borderRadius: '4px',
+            border: '1px solid #27272a',
+            fontWeight: 600,
+          }}
+        >
+          {token}
+        </span>
+      );
+    } else if (/^(?:-X|-H|-F|POST|headers|body|method|FormData)$/.test(token)) {
+      parts.push(
+        <span key={match.index} style={{ color: '#a1a1aa', fontWeight: 600 }}>
+          {token}
+        </span>
+      );
+    } else {
+      parts.push(
+        <span key={match.index} style={{ color: '#ffffff', fontWeight: 600 }}>
+          {token}
+        </span>
+      );
+    }
+    lastIndex = tokenRegex.lastIndex;
+  }
+
+  if (lastIndex < line.length) {
+    parts.push(line.substring(lastIndex));
+  }
+
+  return parts;
+}
+
+const fileInfo: Record<SnippetLang, { filename: string; method: string; path: string }> = {
+  curl: { filename: 'request.sh', method: 'POST', path: '/v1/vision/analyze' },
+  python: { filename: 'extract_document.py', method: 'POST', path: '/v1/vision/analyze' },
+  javascript: { filename: 'extract.mjs', method: 'POST', path: '/v1/vision/analyze' },
+  react: { filename: 'DocumentScanner.tsx', method: 'POST', path: '/v1/vision/analyze' },
+};
+
 export default function Developers() {
-  const { user, createApiKey, revokeApiKey, recordApiUsage } = useAuth();
+  const { user, createApiKey, revokeApiKey } = useAuth();
   const { addToast } = useToast();
 
   const [visibleKeyIds, setVisibleKeyIds] = useState<Record<string, boolean>>({});
@@ -36,10 +102,6 @@ export default function Developers() {
   const [newKeyName, setNewKeyName] = useState('');
   const [showCreateInput, setShowCreateInput] = useState(false);
   const [selectedKeyId, setSelectedKeyId] = useState<string>('');
-
-  // Playground state
-  const [playgroundTesting, setPlaygroundTesting] = useState(false);
-  const [playgroundOutput, setPlaygroundOutput] = useState<string | null>(null);
 
   const selectedKeyObj =
     user?.keys?.find((k) => k.id === selectedKeyId) ||
@@ -85,105 +147,6 @@ export default function Developers() {
     if (confirm(`Are you sure you want to revoke "${name}"? Apps using this key will immediately lose access.`)) {
       revokeApiKey(id);
       addToast(`Revoked key: ${name}`, 'info');
-    }
-  };
-
-  const [testFile, setTestFile] = useState<File | null>(null);
-
-  const handleTestPlayground = async () => {
-    if (selectedKeyObj?.status === 'revoked') {
-      setPlaygroundOutput(
-        JSON.stringify(
-          {
-            status: 'error',
-            code: 401,
-            message: 'Unauthorized: This API key has been revoked.',
-          },
-          null,
-          2
-        )
-      );
-      addToast('Cannot execute: This API key is revoked', 'error');
-      return;
-    }
-
-    setPlaygroundTesting(true);
-    setPlaygroundOutput(null);
-    const start = Date.now();
-
-    try {
-      const { Client, handle_file } = await import('@gradio/client');
-      const client = await Client.connect(ENGINE_CONFIG.spaceTarget);
-
-      let targetBlob: Blob | File;
-      let filename = 'test_image.png';
-
-      if (testFile) {
-        targetBlob = testFile;
-        filename = testFile.name;
-      } else {
-        // Generate a test image with text
-        const canvas = document.createElement('canvas');
-        canvas.width = 600;
-        canvas.height = 140;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, 600, 140);
-          ctx.fillStyle = '#0f172a';
-          ctx.font = 'bold 22px sans-serif';
-          ctx.fillText('OmniParse API Test', 24, 46);
-          ctx.font = '15px monospace';
-          ctx.fillStyle = '#334155';
-          ctx.fillText(`Key: ${activeKey.substring(0, 12)}...`, 24, 82);
-          ctx.fillText(`Time: ${new Date().toLocaleTimeString()}`, 24, 110);
-        }
-        targetBlob = await new Promise<Blob>((resolve) => {
-          canvas.toBlob((b) => resolve(b || new Blob()), 'image/png');
-        });
-      }
-
-      const res = await client.predict('/gradio_ocr', {
-        img: typeof handle_file === 'function' ? handle_file(targetBlob) : targetBlob,
-      });
-
-      const elapsed = Date.now() - start;
-      const raw = ((res.data as any)?.[0] as string) || '';
-      const lines = raw.split('\n').map((l: string) => l.trim()).filter(Boolean);
-
-      setPlaygroundOutput(
-        JSON.stringify(
-          {
-            status: 'success',
-            code: 200,
-            latency_ms: elapsed,
-            payload: {
-              filename,
-              extracted_lines_count: lines.length,
-              extracted_text: lines,
-            },
-          },
-          null,
-          2
-        )
-      );
-      recordApiUsage(selectedKeyObj?.id);
-      addToast(`API call succeeded in ${elapsed}ms`, 'success');
-    } catch (err: any) {
-      setPlaygroundOutput(
-        JSON.stringify(
-          {
-            status: 'error',
-            code: 500,
-            message: err?.message || 'Error communicating with OmniParse Engine',
-          },
-          null,
-          2
-        )
-      );
-      addToast('API call failed — check network connection', 'error');
-    } finally {
-      setPlaygroundTesting(false);
     }
   };
 
@@ -465,118 +428,61 @@ export function DocumentScanner() {
           )}
         </div>
 
-        <div className={styles.tabsBar}>
-          <button
-            className={`${styles.tabBtn} ${activeSnippetLang === 'curl' ? styles.tabBtnActive : ''}`}
-            onClick={() => setActiveSnippetLang('curl')}
-          >
-            cURL
-          </button>
-          <button
-            className={`${styles.tabBtn} ${activeSnippetLang === 'python' ? styles.tabBtnActive : ''}`}
-            onClick={() => setActiveSnippetLang('python')}
-          >
-            Python
-          </button>
-          <button
-            className={`${styles.tabBtn} ${activeSnippetLang === 'javascript' ? styles.tabBtnActive : ''}`}
-            onClick={() => setActiveSnippetLang('javascript')}
-          >
-            JavaScript
-          </button>
-          <button
-            className={`${styles.tabBtn} ${activeSnippetLang === 'react' ? styles.tabBtnActive : ''}`}
-            onClick={() => setActiveSnippetLang('react')}
-          >
-            React
-          </button>
-        </div>
-
-        <div className={styles.codeBlock}>
-          <button
-            className={styles.codeCopyBtn}
-            onClick={() => copySnippetToClipboard(snippets[activeSnippetLang])}
-          >
-            {copiedSnippet ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
-            <span>{copiedSnippet ? 'Copied!' : 'Copy'}</span>
-          </button>
-          <pre style={{ margin: 0, overflowX: 'auto' }}>
-            <code>{snippets[activeSnippetLang]}</code>
-          </pre>
-        </div>
-      </div>
-
-      {/* API Playground */}
-      <div className={styles.sectionCard}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h2 className={styles.sectionTitle}>
-              <Sparkles size={18} color="#f59e0b" />
-              API Playground
-            </h2>
-            <p className={styles.sectionDesc}>
-              Test your API key with a live OCR request.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <input
-              type="file"
-              id="playground-file"
-              style={{ display: 'none' }}
-              accept="image/*,.pdf"
-              onChange={(e) => {
-                if (e.target.files?.[0]) setTestFile(e.target.files[0]);
-              }}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => document.getElementById('playground-file')?.click()}
-            >
-              <Upload size={14} />
-              <span>{testFile ? testFile.name : 'Upload File'}</span>
-            </Button>
-            {testFile && (
-              <Button
+        {/* Segmented language tabs */}
+        <div>
+          <div className={styles.tabsBar}>
+            {(['curl', 'python', 'javascript', 'react'] as SnippetLang[]).map((lang) => (
+              <button
+                key={lang}
                 type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setTestFile(null)}
+                className={`${styles.tabBtn} ${activeSnippetLang === lang ? styles.tabBtnActive : ''}`}
+                onClick={() => setActiveSnippetLang(lang)}
               >
-                Clear
-              </Button>
-            )}
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleTestPlayground}
-              disabled={playgroundTesting}
-            >
-              <Zap size={14} />
-              <span>{playgroundTesting ? 'Running...' : 'Run API Call'}</span>
-            </Button>
+                {lang === 'curl' ? 'cURL' : lang === 'python' ? 'Python' : lang === 'javascript' ? 'JavaScript' : 'React'}
+              </button>
+            ))}
           </div>
         </div>
 
-        {playgroundOutput ? (
-          <div className={styles.codeBlock} style={{ background: '#0b1329', borderColor: '#1e3a8a' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, borderBottom: '1px solid #1e293b', paddingBottom: 6 }}>
-              <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>● Response</span>
-              <span style={{ fontSize: 11, color: '#94a3b8' }}>application/json</span>
+        {/* Modern Code Window */}
+        <div className={styles.codeWindow}>
+          <div className={styles.codeWindowHeader}>
+            <div className={styles.codeWindowHeaderLeft}>
+              <span className={styles.codeFileName}>
+                <Terminal size={13} style={{ color: '#a1a1aa' }} />
+                {fileInfo[activeSnippetLang].filename}
+              </span>
+              <span className={styles.methodTag}>{fileInfo[activeSnippetLang].method}</span>
+              <span className={styles.pathTag}>{fileInfo[activeSnippetLang].path}</span>
             </div>
-            <pre style={{ margin: 0 }}>
-              <code>{playgroundOutput}</code>
+
+            <div className={styles.codeWindowHeaderRight}>
+              <button
+                type="button"
+                className={styles.codeCopyBtn}
+                onClick={() => copySnippetToClipboard(snippets[activeSnippetLang])}
+              >
+                {copiedSnippet ? <Check size={13} color="#f4f4f5" /> : <Copy size={13} />}
+                <span>{copiedSnippet ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.codeBody}>
+            <div className={styles.codeLineNumbers}>
+              {snippets[activeSnippetLang].split('\n').map((_, i) => (
+                <div key={i}>{i + 1}</div>
+              ))}
+            </div>
+            <pre className={styles.codeContent}>
+              {snippets[activeSnippetLang].split('\n').map((line, idx) => (
+                <div key={idx} className={styles.codeLine}>
+                  {highlightCodeLine(line)}
+                </div>
+              ))}
             </pre>
           </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '32px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)' }}>
-            <Layers size={24} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.6 }} />
-            <p style={{ margin: 0, fontWeight: 500 }}>API Playground</p>
-            <small>Upload a file or click "Run API Call" to test your key.</small>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Endpoints Reference */}

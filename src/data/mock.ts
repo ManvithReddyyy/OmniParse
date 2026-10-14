@@ -117,12 +117,12 @@ export const supportedFormats = [
 /* ── Processing Steps ───────────────────────────────────── */
 
 export const processingSteps = [
-  { id: 'upload', label: 'Uploading', duration: 800 },
-  { id: 'layout', label: 'Layout Analysis', duration: 1200 },
-  { id: 'ocr', label: 'OCR', duration: 1000 },
-  { id: 'tables', label: 'Table Detection', duration: 900 },
-  { id: 'images', label: 'Image Detection', duration: 800 },
-  { id: 'semantic', label: 'Semantic Reconstruction', duration: 1000 },
+  { id: 'upload', label: 'Uploading', duration: 50 },
+  { id: 'layout', label: 'Layout Analysis', duration: 50 },
+  { id: 'ocr', label: 'OCR', duration: 50 },
+  { id: 'tables', label: 'Table Detection', duration: 50 },
+  { id: 'images', label: 'Image Detection', duration: 50 },
+  { id: 'semantic', label: 'Semantic Reconstruction', duration: 50 },
   { id: 'completed', label: 'Completed', duration: 0 },
 ];
 

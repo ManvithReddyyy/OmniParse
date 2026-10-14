@@ -7,6 +7,7 @@ import {
   type TextBlock,
   type ReadingOrderItem,
   type ExtractedImage,
+  type ExtractedTable,
   formatFileSize,
 } from '../data/mock';
 
@@ -249,45 +250,54 @@ export async function extractStringsFromFile(file: File): Promise<string[]> {
   return [];
 }
 
-export async function parseDocumentFile(file: File): Promise<string[]> {
-  const filename = file.name.toLowerCase();
-  if (filename.endsWith('.pdf')) {
-    return await extractPdfText(file);
-  } else if (filename.endsWith('.pptx') || filename.endsWith('.ppt')) {
-    const pptxLines = await extractPptxText(file);
-    if (pptxLines.length > 0) return pptxLines;
-  } else if (filename.endsWith('.docx') || filename.endsWith('.doc')) {
-    const docxLines = await extractDocxText(file);
-    if (docxLines.length > 0) return docxLines;
-  } else if (filename.endsWith('.txt') || filename.endsWith('.json') || filename.endsWith('.csv') || filename.endsWith('.md')) {
-    return await extractPlainText(file);
-  } else if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif|svg)$/i.test(filename)) {
-    try {
-      const { Client, handle_file } = await import('@gradio/client');
-      const customUrl = typeof localStorage !== 'undefined' ? localStorage.getItem('omniparse_api_url') : null;
-      const target = (customUrl && customUrl.includes('hf.space')) ? customUrl : ENGINE_CONFIG.spaceTarget;
-      const client = await Client.connect(target);
-      const res = await client.predict('/gradio_ocr', {
-        img: typeof handle_file === 'function' ? handle_file(file) : file,
-      });
-      const raw = ((res.data as any)?.[0] as string) || '';
-      const lines = raw
-        .split('\n')
-        .map((l: string) => l.trim())
-        .filter((l: string) => l.length > 0 && l !== '[No text detected in image]');
-      if (lines.length > 0) {
+export async function parseDocumentFile(
+  file: File,
+  onDetails?: (details: { blocks?: any[]; tables?: any[] }) => void
+): Promise<string[]> {
+  const customUrl =
+    typeof localStorage !== 'undefined' ? localStorage.getItem('omniparse_api_url') : null;
+  const host =
+    customUrl && customUrl.includes('hf.space')
+      ? customUrl.replace(/\/+$/, '')
+      : ENGINE_CONFIG.directHost; // https://manvithreddy-omniparse-backend.hf.space
+
+  // 1. Send ANY file (PDF, PPTX, DOCX, PNG, JPG, WEBP) to Hugging Face Indra OCR
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('ocr_lang', 'en');
+
+    const response = await fetch(`${host}/v1/vision/analyze`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const lines: string[] = data?.payload?.extracted_text || [];
+      const blocks = data?.payload?.blocks || [];
+      const tables = data?.payload?.tables || [];
+
+      if (onDetails) {
+        onDetails({ blocks, tables });
+      }
+
+      if (lines.length > 0 && lines[0] !== '[No text detected in document]') {
+        (lines as any).blocks = blocks;
+        (lines as any).tables = tables;
         return lines;
       }
-      return [raw.trim() || '[No text detected in image]'];
-    } catch (e) {
-      console.warn('[OmniParse] parseDocumentFile Gradio OCR error:', e);
-      return ['[Error connecting to OCR engine: please check network]'];
     }
+  } catch (err) {
+    console.warn('[OmniParse] Direct HF analyze call failed, falling back:', err);
   }
 
-  const lines = await extractStringsFromFile(file);
-  if (lines.length > 0) return lines;
-  return extractPlainText(file);
+  // 2. Fallback to local browser extraction if offline
+  const filename = file.name.toLowerCase();
+  if (filename.endsWith('.pdf')) return await extractPdfText(file);
+  if (filename.endsWith('.pptx') || filename.endsWith('.ppt')) return await extractPptxText(file);
+  if (filename.endsWith('.docx') || filename.endsWith('.doc')) return await extractDocxText(file);
+  return await extractPlainText(file);
 }
 
 export async function extractEmbeddedImagesFromFile(file: File): Promise<ExtractedImage[]> {
@@ -340,90 +350,268 @@ export async function extractEmbeddedImagesFromFile(file: File): Promise<Extract
   return images;
 }
 
+export function extractMarkdownTables(lines: string[]): ExtractedTable[] {
+  const tables: ExtractedTable[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (line.startsWith('|') && line.endsWith('|') && i + 1 < lines.length) {
+      const nextLine = lines[i + 1].trim();
+      if (nextLine.startsWith('|') && nextLine.endsWith('|') && /^\|[\s\-:|]+\|$/.test(nextLine)) {
+        const headers = line
+          .slice(1, -1)
+          .split('|')
+          .map((h) => h.trim());
+        const rows: string[][] = [];
+        let j = i + 2;
+        while (j < lines.length) {
+          const rowLine = lines[j].trim();
+          if (rowLine.startsWith('|') && rowLine.endsWith('|')) {
+            const cells = rowLine
+              .slice(1, -1)
+              .split('|')
+              .map((c) => c.trim());
+            rows.push(cells);
+            j++;
+          } else {
+            break;
+          }
+        }
+        if (headers.length > 0) {
+          tables.push({
+            id: `tbl-${tables.length + 1}`,
+            headers,
+            rows,
+            confidence: 0.99,
+          });
+        }
+        i = j;
+        continue;
+      }
+    }
+    i++;
+  }
+  return tables;
+}
+
 export function createAnalysisFromLines(
   lines: string[],
   file: File,
   extractedImages: ExtractedImage[] = [],
-  pageImages: string[] = []
+  pageImages: string[] = [],
+  rawBlocks?: any[],
+  rawTables?: any[]
 ): DocumentAnalysis {
-  const blocks: { type: 'header' | 'title' | 'paragraph' | 'list'; text: string }[] = [];
-  let currentParagraph = '';
-  let currentList: string[] = [];
+  // 1. Process Extracted Tables (from backend or Markdown detection)
+  let parsedTables: ExtractedTable[] = [];
+  const incomingTables =
+    rawTables && rawTables.length > 0
+      ? rawTables
+      : (lines as any)?.tables && (lines as any).tables.length > 0
+        ? (lines as any).tables
+        : null;
 
-  const flushParagraph = () => {
-    if (currentParagraph.trim()) {
-      blocks.push({ type: 'paragraph', text: currentParagraph.trim() });
-      currentParagraph = '';
-    }
-  };
-
-  const flushList = () => {
-    if (currentList.length > 0) {
-      blocks.push({ type: 'list', text: currentList.join('\n') });
-      currentList = [];
-    }
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    const isList = line.startsWith('•') || line.startsWith('-') || line.startsWith('*') || /^\d+[\.\)]/.test(line);
-
-    const isHeading =
-      !isList &&
-      (i === 0 ||
-        /^Slide \d+$/.test(line) ||
-        line.startsWith('Page ') ||
-        line.endsWith(':') ||
-        (line.length < 50 && (line.includes('Projects') || line.includes('Skills') || line.includes('Education') || line.includes('Experience') || line.includes('Chapter') || line.includes('Contents'))) ||
-        (line.length < 35 && /^[A-Z0-9\s\-\,\(\)\|\/]+$/.test(line) && !line.includes('@') && !line.includes('http')));
-
-    if (isHeading) {
-      flushParagraph();
-      flushList();
-      blocks.push({ type: i === 0 || /^Slide \d+$/.test(line) || line.startsWith('Page ') ? 'header' : 'title', text: line });
-    } else if (isList) {
-      flushParagraph();
-      currentList.push(line);
-    } else {
-      flushList();
-      if (currentParagraph) {
-        currentParagraph += ' ' + line;
-      } else {
-        currentParagraph = line;
-      }
-    }
+  if (incomingTables && Array.isArray(incomingTables) && incomingTables.length > 0) {
+    parsedTables = incomingTables.map((t: any, idx: number) => ({
+      id: t.id || `tbl-${idx + 1}`,
+      headers: Array.isArray(t.headers) ? t.headers.map(String) : [],
+      rows: Array.isArray(t.rows)
+        ? t.rows.map((r: any) => (Array.isArray(r) ? r.map(String) : [String(r)]))
+        : [],
+      confidence: typeof t.confidence === 'number' ? t.confidence : 0.99,
+    }));
+  } else {
+    parsedTables = extractMarkdownTables(lines);
   }
 
-  flushParagraph();
-  flushList();
+  // 2. Process Blocks & Layout Regions
+  let layoutRegions: LayoutRegion[] = [];
+  let textBlocks: TextBlock[] = [];
+  let readingOrder: ReadingOrderItem[] = [];
 
-  const layoutRegions: LayoutRegion[] = blocks.map((b, idx) => ({
-    id: `lr-${idx + 1}`,
-    type: b.type === 'header' ? 'header' : b.type === 'title' ? 'title' : b.type === 'list' ? 'list' : 'paragraph',
-    confidence: 0.985,
-    bbox: { x: 50, y: 40 + idx * 45, width: 700, height: Math.max(25, Math.ceil(b.text.length / 60) * 20) },
-    content: b.text,
-  }));
+  const incomingBlocks =
+    rawBlocks && rawBlocks.length > 0
+      ? rawBlocks
+      : (lines as any)?.blocks && (lines as any).blocks.length > 0
+        ? (lines as any).blocks
+        : null;
 
-  const textBlocks: TextBlock[] = blocks.map((b, idx) => ({
-    id: `tb-${idx + 1}`,
-    text: b.text,
-    confidence: 0.985,
-    bbox: { x: 50, y: 40 + idx * 45, width: 700, height: Math.max(25, Math.ceil(b.text.length / 60) * 20) },
-    blockType: b.type,
-  }));
+  if (incomingBlocks && Array.isArray(incomingBlocks) && incomingBlocks.length > 0) {
+    layoutRegions = incomingBlocks.map((b: any, idx: number) => {
+      let regionType: LayoutRegion['type'] = 'paragraph';
+      const bType = String(b.type || '').toLowerCase();
+      if (bType.includes('header') || bType.includes('head')) regionType = 'header';
+      else if (bType.includes('title')) regionType = 'title';
+      else if (bType.includes('table')) regionType = 'table';
+      else if (bType.includes('image') || bType.includes('figure')) regionType = 'figure';
+      else if (bType.includes('list')) regionType = 'list';
+      else if (bType.includes('footer')) regionType = 'footer';
+      else if (bType.includes('caption')) regionType = 'caption';
 
-  const readingOrder: ReadingOrderItem[] = blocks.map((b, idx) => ({
-    order: idx + 1,
-    regionType: b.type,
-    label: b.text.length > 40 ? b.text.slice(0, 40) + '...' : b.text,
-    regionId: `lr-${idx + 1}`,
-  }));
+      return {
+        id: `lr-${idx + 1}`,
+        type: regionType,
+        confidence: typeof b.confidence === 'number' ? b.confidence : 0.985,
+        bbox:
+          b.bbox && typeof b.bbox.x === 'number'
+            ? b.bbox
+            : { x: 50, y: 40 + idx * 45, width: 700, height: 30 },
+        content: String(b.text || ''),
+      };
+    });
+
+    textBlocks = incomingBlocks.map((b: any, idx: number) => ({
+      id: `tb-${idx + 1}`,
+      text: String(b.text || ''),
+      confidence: typeof b.confidence === 'number' ? b.confidence : 0.985,
+      bbox:
+        b.bbox && typeof b.bbox.x === 'number'
+          ? b.bbox
+          : { x: 50, y: 40 + idx * 45, width: 700, height: 30 },
+      blockType: String(b.type || 'text'),
+    }));
+
+    readingOrder = incomingBlocks.map((b: any, idx: number) => ({
+      order: idx + 1,
+      regionType: String(b.type || 'paragraph'),
+      label:
+        String(b.text || '').length > 40
+          ? String(b.text || '').slice(0, 40) + '...'
+          : String(b.text || ''),
+      regionId: `lr-${idx + 1}`,
+    }));
+  } else {
+    // Client-side heuristics
+    const blocks: { type: 'header' | 'title' | 'paragraph' | 'list'; text: string }[] = [];
+    let currentParagraph = '';
+    let currentList: string[] = [];
+
+    const flushParagraph = () => {
+      if (currentParagraph.trim()) {
+        blocks.push({ type: 'paragraph', text: currentParagraph.trim() });
+        currentParagraph = '';
+      }
+    };
+
+    const flushList = () => {
+      if (currentList.length > 0) {
+        blocks.push({ type: 'list', text: currentList.join('\n') });
+        currentList = [];
+      }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const isList =
+        line.startsWith('•') ||
+        line.startsWith('-') ||
+        line.startsWith('*') ||
+        /^\d+[\.\)]/.test(line);
+
+      const isHeading =
+        !isList &&
+        (i === 0 ||
+          /^Slide \d+$/.test(line) ||
+          line.startsWith('Page ') ||
+          line.endsWith(':') ||
+          (line.length < 50 &&
+            (line.includes('Projects') ||
+              line.includes('Skills') ||
+              line.includes('Education') ||
+              line.includes('Experience') ||
+              line.includes('Chapter') ||
+              line.includes('Contents'))) ||
+          (line.length < 35 &&
+            /^[A-Z0-9\s\-\,\(\)\|\/]+$/.test(line) &&
+            !line.includes('@') &&
+            !line.includes('http')));
+
+      if (isHeading) {
+        flushParagraph();
+        flushList();
+        blocks.push({
+          type: i === 0 || /^Slide \d+$/.test(line) || line.startsWith('Page ') ? 'header' : 'title',
+          text: line,
+        });
+      } else if (isList) {
+        flushParagraph();
+        currentList.push(line);
+      } else {
+        flushList();
+        if (currentParagraph) {
+          currentParagraph += ' ' + line;
+        } else {
+          currentParagraph = line;
+        }
+      }
+    }
+
+    flushParagraph();
+    flushList();
+
+    layoutRegions = blocks.map((b, idx) => ({
+      id: `lr-${idx + 1}`,
+      type:
+        b.type === 'header'
+          ? 'header'
+          : b.type === 'title'
+            ? 'title'
+            : b.type === 'list'
+              ? 'list'
+              : 'paragraph',
+      confidence: 0.985,
+      bbox: {
+        x: 50,
+        y: 40 + idx * 45,
+        width: 700,
+        height: Math.max(25, Math.ceil(b.text.length / 60) * 20),
+      },
+      content: b.text,
+    }));
+
+    textBlocks = blocks.map((b, idx) => ({
+      id: `tb-${idx + 1}`,
+      text: b.text,
+      confidence: 0.985,
+      bbox: {
+        x: 50,
+        y: 40 + idx * 45,
+        width: 700,
+        height: Math.max(25, Math.ceil(b.text.length / 60) * 20),
+      },
+      blockType: b.type,
+    }));
+
+    readingOrder = blocks.map((b, idx) => ({
+      order: idx + 1,
+      regionType: b.type,
+      label: b.text.length > 40 ? b.text.slice(0, 40) + '...' : b.text,
+      regionId: `lr-${idx + 1}`,
+    }));
+  }
+
+  // Ensure extracted tables are in layoutRegions
+  parsedTables.forEach((tbl, tIdx) => {
+    const hasTableRegion = layoutRegions.some((lr) => lr.type === 'table');
+    if (!hasTableRegion) {
+      layoutRegions.push({
+        id: `tbl-lr-${tbl.id || tIdx + 1}`,
+        type: 'table',
+        confidence: tbl.confidence || 0.99,
+        bbox: { x: 45, y: 150 + tIdx * 160, width: 710, height: 140 },
+        content:
+          tbl.headers.join(' | ') +
+          '\n' +
+          tbl.rows.map((r) => (Array.isArray(r) ? r.join(' | ') : String(r))).join('\n'),
+      });
+    }
+  });
 
   const wordCount = lines.join(' ').split(/\s+/).filter(Boolean).length;
-  const pageCount = pageImages.length > 0 ? pageImages.length : Math.max(1, Math.ceil(lines.length / 25));
+  const pageCount =
+    pageImages.length > 0 ? pageImages.length : Math.max(1, Math.ceil(lines.length / 25));
 
   // Automatic Script & Language Detection
   const sampleText = lines.slice(0, 60).join(' ');
@@ -446,7 +634,7 @@ export function createAnalysisFromLines(
     documentId: `doc-live-${Date.now()}`,
     layoutRegions,
     textBlocks,
-    tables: [],
+    tables: parsedTables,
     images: extractedImages,
     pageImages,
     metadata: {
@@ -455,14 +643,14 @@ export function createAnalysisFromLines(
       documentType: file.name.endsWith('.pdf')
         ? 'PDF Document'
         : file.name.endsWith('.pptx') || file.name.endsWith('.ppt')
-        ? 'PowerPoint Presentation'
-        : file.name.endsWith('.docx') || file.name.endsWith('.doc')
-        ? 'Word Document'
-        : 'Text Document',
+          ? 'PowerPoint Presentation'
+          : file.name.endsWith('.docx') || file.name.endsWith('.doc')
+            ? 'Word Document'
+            : 'Text Document',
       wordCount: wordCount || 100,
       fileSize: formatFileSize(file.size),
       creationDate: new Date().toISOString().split('T')[0],
-      author: 'PaddleOCR / OmniParse Engine',
+      author: 'Indra OCR / OmniParse Engine',
       encoding: 'UTF-8',
     },
     readingOrder,

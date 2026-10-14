@@ -10,15 +10,15 @@
   color-scheme: dark;
 
   /* Backgrounds — Deep Obsidian & Charcoal Surfaces */
-  --bg-primary: #0A0A0A;
+  --bg-primary: #0C0C0E;
   /* Main canvas & table background */
   --bg-secondary: #0F0F0F;
   /* Sidebar & structural surface */
   --bg-subtle: #141414;
   /* Search inputs, filter pills, secondary buttons */
-  --bg-card: #121212;
+  --bg-card: #131316;
   /* Elevated KPI metric cards */
-  --bg-surface: #121212;
+  --bg-surface: #131316;
   /* Alias for card surface */
   --bg-hover: #181818;
   /* Table row & sidebar item hover */
@@ -30,7 +30,7 @@
   /* Deep modal backdrop */
 
   /* Borders — Crisp Hairline Grid & Card Dividers */
-  --border: #1F1F1F;
+  --border: #222227;
   /* Primary card, button & table grid border */
   --border-subtle: #161616;
   /* Delicate row dividers */
@@ -147,14 +147,14 @@
   --space-20: 80px;
 
   /* Border Radius */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
+  --radius-xs: 6px;
+  --radius-sm: 8px;
   /* Status badges & KPI icon wells */
-  --radius-md: 8px;
+  --radius-md: 10px;
   /* Action buttons, inputs & sidebar items */
-  --radius-lg: 12px;
+  --radius-lg: 14px;
   /* KPI Metric cards */
-  --radius-xl: 16px;
+  --radius-xl: 18px;
   /* App window frame / Modals */
   --radius-full: 9999px;
 
@@ -189,14 +189,14 @@
 /* Explicit Dark Theme Attribute Support */
 html[data-theme="dark"] {
   color-scheme: dark;
-  --bg-primary: #0A0A0A;
+  --bg-primary: #0C0C0E;
   --bg-secondary: #0F0F0F;
   --bg-subtle: #141414;
-  --bg-card: #121212;
-  --bg-surface: #121212;
+  --bg-card: #131316;
+  --bg-surface: #131316;
   --bg-hover: #181818;
   --bg-active: #1F1F1F;
-  --border: #1F1F1F;
+  --border: #222227;
   --border-subtle: #161616;
   --border-hover: #2E2E2E;
   --border-active: #3B82F6;

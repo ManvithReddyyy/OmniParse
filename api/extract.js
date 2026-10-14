@@ -1,4 +1,3 @@
-import { Client } from '@gradio/client';
 import busboy from 'busboy';
 
 export const config = {
@@ -57,23 +56,30 @@ export default async function handler(req, res) {
       }
 
       try {
-        const client = await Client.connect('ManvithReddy/omniparse-backend');
+        const formData = new FormData();
         const blob = new Blob([fileBuffer], { type: mimeType });
-        const result = await client.predict('/gradio_ocr', { img: blob });
-        const raw = result.data?.[0] || '';
-        const lines = raw
-          .split('\n')
-          .map((l) => l.trim())
-          .filter((l) => l.length > 0 && l !== '[No text detected in image]');
+        formData.append('file', blob, filename);
+        formData.append('ocr_lang', 'en');
+
+        const hfRes = await fetch('https://manvithreddy-omniparse-backend.hf.space/v1/vision/analyze', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await hfRes.json();
+        const lines = data?.payload?.extracted_text || ['[No text detected]'];
 
         return res.status(200).json({
           status: 'success',
           code: 200,
-          engine: 'OmniParse Vision Neural v2.3 (PaddleOCR 3.7 Core)',
+          engine: 'OmniParse Vision v3.0 (Indra OCR + PyMuPDF4LLM)',
+          latency_sec: data?.latency_sec,
           filename,
           payload: {
             lines_count: lines.length,
-            extracted_text: lines.length > 0 ? lines : [raw.trim() || '[No text detected in image]'],
+            extracted_text: lines,
+            blocks: data?.payload?.blocks || [],
+            tables: data?.payload?.tables || [],
           },
         });
       } catch (ocrErr) {

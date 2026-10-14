@@ -57,7 +57,9 @@ export default function Analyze() {
       lines: string[],
       backendImages?: ExtractedImage[],
       pageImages: string[] = [],
-      durationSec: number = 1.2
+      durationSec: number = 1.2,
+      blocks?: any[],
+      tables?: any[]
     ) => {
       let images = backendImages || [];
       if (!images || images.length === 0) {
@@ -76,6 +78,8 @@ export default function Analyze() {
           pageImages,
           userId,
           isRealSession,
+          blocks,
+          tables,
         });
 
       addDocument(liveDoc, liveAnalysis, liveTransform, liveJob);
@@ -92,50 +96,8 @@ export default function Analyze() {
   const executeOcr = useCallback(
     async (fileToProcess: File) => {
       const startTime = Date.now();
-      const isImage = fileToProcess.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff|gif)$/i.test(fileToProcess.name);
 
-      // Direct OCR for images via Gradio
-      if (isImage) {
-        try {
-          const pageImageDataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve((e.target?.result as string) || '');
-            reader.onerror = () => resolve('');
-            reader.readAsDataURL(fileToProcess);
-          });
-
-          const customUrl = localStorage.getItem('omniparse_api_url');
-          const spaceTarget = customUrl && customUrl.includes('hf.space')
-            ? customUrl
-            : ENGINE_CONFIG.spaceTarget;
-
-          const { Client, handle_file } = await import('@gradio/client');
-          const client = await Client.connect(spaceTarget);
-          const result = await client.predict('/gradio_ocr', {
-            img: typeof handle_file === 'function' ? handle_file(fileToProcess) : fileToProcess,
-          });
-
-          const rawText = ((result.data as any)?.[0] as string) || '';
-          const lines = rawText
-            .split('\n')
-            .map((l: string) => l.trim())
-            .filter((l: string) => l.length > 0 && l !== '[No text detected in image]');
-
-          const elapsedSec = Math.max((Date.now() - startTime) / 1000, 0.5);
-          await finishProcessing(
-            fileToProcess,
-            lines.length > 0 ? lines : [rawText.trim() || '[No text detected in image]'],
-            [],
-            pageImageDataUrl ? [pageImageDataUrl] : [],
-            elapsedSec
-          );
-          return;
-        } catch (gradioErr) {
-          console.warn('[OmniParse] Gradio cloud OCR note:', gradioErr);
-        }
-      }
-
-      // REST API attempt (for PDFs/documents or local server)
+      // 1. Primary: Direct Fast Indra OCR HTTP Analyze Endpoint
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 60000);
@@ -146,7 +108,8 @@ export default function Analyze() {
 
         const customApiUrl = localStorage.getItem('omniparse_api_url');
         const isCustomRemote = customApiUrl && !customApiUrl.includes('127.0.0.1') && !customApiUrl.includes('localhost');
-        const endpoint = isCustomRemote ? `${customApiUrl.replace(/\/+$/, '')}/v1/vision/analyze` : '/api/v1/extract';
+        const host = isCustomRemote ? customApiUrl.replace(/\/+$/, '') : ENGINE_CONFIG.directHost;
+        const endpoint = `${host}/v1/vision/analyze`;
 
         const res = await fetch(endpoint, {
           method: 'POST',
@@ -156,7 +119,7 @@ export default function Analyze() {
 
         clearTimeout(timeoutId);
 
-        const elapsedSec = Math.max((Date.now() - startTime) / 1000, 0.4);
+        const elapsedSec = Math.max((Date.now() - startTime) / 1000, 0.2);
 
         if (res.ok) {
           const data = await res.json();
@@ -170,25 +133,36 @@ export default function Analyze() {
               data.payload.extracted_text || [],
               data.payload.extracted_images || [],
               data.payload.page_images || [],
-              elapsedSec
+              elapsedSec,
+              data.payload.blocks || [],
+              data.payload.tables || []
             );
             return;
           }
         }
       } catch (err) {
-        console.warn('[OmniParse] Local/REST backend note:', err);
+        console.warn('[OmniParse] Direct backend analyze note:', err);
       }
 
-      // Client-side extraction fallback (PDF.js, Office docx, PPTX)
-      const elapsedSec = Math.max((Date.now() - startTime) / 1000, 0.4);
-      const lines = await parseDocumentFile(fileToProcess);
+      // 2. Client-side extraction fallback (PDF.js, Office docx, PPTX)
+      const elapsedSec = Math.max((Date.now() - startTime) / 1000, 0.2);
+      let fallbackBlocks: any[] = [];
+      let fallbackTables: any[] = [];
+      const lines = await parseDocumentFile(fileToProcess, (details) => {
+        fallbackBlocks = details.blocks || [];
+        fallbackTables = details.tables || [];
+      });
+      if (!fallbackBlocks.length && (lines as any).blocks) fallbackBlocks = (lines as any).blocks;
+      if (!fallbackTables.length && (lines as any).tables) fallbackTables = (lines as any).tables;
       const images = await extractEmbeddedImagesFromFile(fileToProcess);
       await finishProcessing(
         fileToProcess,
         lines.length > 0 ? lines : [fileToProcess.name],
         images,
         [],
-        elapsedSec
+        elapsedSec,
+        fallbackBlocks,
+        fallbackTables
       );
     },
     [finishProcessing]

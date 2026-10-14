@@ -207,6 +207,257 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Structured Indra / Multi-Engine Document Parser ───────────
+def ocr_file_path_with_indra(file_path: str, ext: str, ocr_lang: str = "auto") -> dict:
+    """
+    Extract text, tables, layout blocks, and images from a document:
+    - PyMuPDF / Indra OCR for PDFs (page.get_text('blocks') and page.find_tables())
+    - python-pptx for presentations (shape text frames & tables)
+    - python-docx for Word documents (paragraphs & docx tables)
+    - PaddleOCR for images with bounding box detection
+    """
+    extracted_text: list[str] = []
+    extracted_images: list[dict] = []
+    page_images: list[str] = []
+    blocks: list[dict] = []
+    tables: list[dict] = []
+
+    lang = "en" if ocr_lang == "auto" else ocr_lang
+
+    if ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"]:
+        with open(file_path, "rb") as f:
+            raw_bytes = f.read()
+        img = Image.open(io.BytesIO(raw_bytes))
+        engine = get_ocr_engine(lang)
+
+        # Run OCR with bounding boxes
+        if engine is not None:
+            import numpy as np
+            img_rgb = img.convert("RGB") if img.mode != "RGB" else img
+            arr = np.array(img_rgb)
+            try:
+                results = engine.ocr(arr)
+            except Exception as e:
+                print(f"[OmniParse] OCR error: {e}")
+                results = None
+
+            if results and isinstance(results, list):
+                for res_item in results:
+                    if not res_item:
+                        continue
+                    if isinstance(res_item, list):
+                        for line_info in res_item:
+                            if isinstance(line_info, (list, tuple)) and len(line_info) >= 2:
+                                pts = line_info[0]
+                                txt_info = line_info[1]
+                                if isinstance(txt_info, (list, tuple)) and len(txt_info) > 0:
+                                    txt = str(txt_info[0]).strip()
+                                    conf = float(txt_info[1]) if len(txt_info) > 1 else 0.98
+                                else:
+                                    txt = str(txt_info).strip()
+                                    conf = 0.98
+                                if txt:
+                                    extracted_text.append(txt)
+                                    if isinstance(pts, (list, tuple)) and len(pts) >= 4:
+                                        xs = [p[0] for p in pts]
+                                        ys = [p[1] for p in pts]
+                                        min_x, max_x = min(xs), max(xs)
+                                        min_y, max_y = min(ys), max(ys)
+                                        blocks.append({
+                                            "type": "text",
+                                            "text": txt,
+                                            "confidence": round(conf, 2),
+                                            "bbox": {
+                                                "x": round(float(min_x), 1),
+                                                "y": round(float(min_y), 1),
+                                                "width": round(float(max_x - min_x), 1),
+                                                "height": round(float(max_y - min_y), 1),
+                                            },
+                                        })
+
+        # Fallback text if format wasn't list
+        if not extracted_text:
+            lines = ocr_image_paddle(img, lang=lang)
+            extracted_text.extend(lines)
+            for idx, line in enumerate(lines):
+                blocks.append({
+                    "type": "text",
+                    "text": line,
+                    "confidence": 0.98,
+                    "bbox": {"x": 40, "y": 40 + idx * 30, "width": 500, "height": 22},
+                })
+
+        b64_img = base64.b64encode(raw_bytes).decode("utf-8")
+        mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
+        page_images.append(f"data:{mime};base64,{b64_img}")
+
+    elif ext == ".pdf":
+        doc = fitz.open(file_path)
+        for page_idx in range(len(doc)):
+            page = doc[page_idx]
+
+            # 1. Native Table Extraction
+            try:
+                tabs = page.find_tables()
+                for t_idx, tab in enumerate(tabs):
+                    tab_data = tab.extract()
+                    if tab_data and len(tab_data) > 0:
+                        headers = [str(c or "").strip() for c in tab_data[0]]
+                        rows = [[str(c or "").strip() for c in r] for r in tab_data[1:]]
+                        if any(headers) or any(any(r) for r in rows):
+                            table_id = f"tbl-p{page_idx + 1}-{t_idx + 1}"
+                            tables.append({
+                                "id": table_id,
+                                "headers": headers,
+                                "rows": rows,
+                                "confidence": 0.99,
+                            })
+                            # Append table representation to text
+                            extracted_text.append("| " + " | ".join(headers) + " |")
+                            extracted_text.append("| " + " | ".join(["---"] * len(headers)) + " |")
+                            for row in rows:
+                                extracted_text.append("| " + " | ".join(row) + " |")
+            except Exception as te:
+                print(f"[OmniParse] PDF table extraction notice: {te}")
+
+            # 2. Extract Text Blocks & Layout
+            page_blocks = page.get_text("blocks")
+            has_text = False
+            for b in page_blocks:
+                x0, y0, x1, y1, text, block_no, block_type = b[:7]
+                clean_t = text.strip()
+                if clean_t:
+                    has_text = True
+                    b_type = "image" if block_type == 1 else ("title" if y0 < 100 and len(clean_t) < 80 else "text")
+                    blocks.append({
+                        "type": b_type,
+                        "text": clean_t,
+                        "confidence": 0.99,
+                        "bbox": {
+                            "x": round(x0, 1),
+                            "y": round(y0, 1),
+                            "width": round(x1 - x0, 1),
+                            "height": round(y1 - y0, 1),
+                        },
+                    })
+                    extracted_text.append(clean_t)
+
+            # 3. Render Pixmap for Document Viewer
+            pix = page.get_pixmap(dpi=150)
+            b64_page = base64.b64encode(pix.tobytes("png")).decode("utf-8")
+            page_images.append(f"data:image/png;base64,{b64_page}")
+
+            # 4. If scanned page with no digital text, run OCR
+            if not has_text:
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                ocr_lines = ocr_image_paddle(img, lang=lang)
+                if ocr_lines:
+                    extracted_text.append(f"--- Page {page_idx + 1} ---")
+                    extracted_text.extend(ocr_lines)
+                    for idx, line in enumerate(ocr_lines):
+                        blocks.append({
+                            "type": "text",
+                            "text": line,
+                            "confidence": 0.95,
+                            "bbox": {"x": 50, "y": 50 + idx * 28, "width": pix.width - 100, "height": 22},
+                        })
+
+        doc.close()
+
+    elif ext in [".pptx", ".ppt"]:
+        prs = Presentation(file_path)
+        for idx, slide in enumerate(prs.slides):
+            slide_header = f"Slide {idx + 1}"
+            extracted_text.append(slide_header)
+            blocks.append({
+                "type": "header",
+                "text": slide_header,
+                "confidence": 0.99,
+                "bbox": {"x": 40, "y": 30, "width": 400, "height": 30},
+            })
+
+            for shape in slide.shapes:
+                # Text Frame
+                if shape.has_text_frame:
+                    t = shape.text_frame.text.strip()
+                    if t:
+                        extracted_text.append(t)
+                        x = round(shape.left / 914400 * 72, 1) if hasattr(shape, "left") and shape.left is not None else 50
+                        y = round(shape.top / 914400 * 72, 1) if hasattr(shape, "top") and shape.top is not None else 80
+                        w = round(shape.width / 914400 * 72, 1) if hasattr(shape, "width") and shape.width is not None else 500
+                        h = round(shape.height / 914400 * 72, 1) if hasattr(shape, "height") and shape.height is not None else 40
+                        blocks.append({
+                            "type": "title" if y < 120 else "text",
+                            "text": t,
+                            "confidence": 0.99,
+                            "bbox": {"x": x, "y": y, "width": w, "height": h},
+                        })
+
+                # Slide Tables
+                if shape.has_table:
+                    t_rows = []
+                    for r in shape.table.rows:
+                        row_vals = [cell.text.strip() for cell in r.cells]
+                        t_rows.append(row_vals)
+                    if t_rows:
+                        headers = t_rows[0]
+                        data_rows = t_rows[1:] if len(t_rows) > 1 else []
+                        table_id = f"tbl-slide{idx + 1}-{len(tables) + 1}"
+                        tables.append({
+                            "id": table_id,
+                            "headers": headers,
+                            "rows": data_rows,
+                            "confidence": 0.99,
+                        })
+                        extracted_text.append("| " + " | ".join(headers) + " |")
+                        extracted_text.append("| " + " | ".join(["---"] * len(headers)) + " |")
+                        for dr in data_rows:
+                            extracted_text.append("| " + " | ".join(dr) + " |")
+
+        page_images = render_pptx_slides(file_path)
+
+    elif ext in [".docx", ".doc"]:
+        docx_doc = DocxDocument(file_path)
+        # Paragraphs
+        for p_idx, para in enumerate(docx_doc.paragraphs):
+            t = para.text.strip()
+            if t:
+                extracted_text.append(t)
+                is_heading = bool(para.style and "Heading" in getattr(para.style, "name", ""))
+                blocks.append({
+                    "type": "header" if is_heading else "paragraph",
+                    "text": t,
+                    "confidence": 0.99,
+                    "bbox": {"x": 50, "y": 40 + p_idx * 28, "width": 600, "height": 22},
+                })
+
+        # Docx Tables
+        for t_idx, d_table in enumerate(docx_doc.tables):
+            t_rows = []
+            for r in d_table.rows:
+                t_rows.append([cell.text.strip() for cell in r.cells])
+            if t_rows:
+                headers = t_rows[0]
+                data_rows = t_rows[1:] if len(t_rows) > 1 else []
+                tables.append({
+                    "id": f"tbl-docx-{t_idx + 1}",
+                    "headers": headers,
+                    "rows": data_rows,
+                    "confidence": 0.99,
+                })
+                extracted_text.append("| " + " | ".join(headers) + " |")
+                extracted_text.append("| " + " | ".join(["---"] * len(headers)) + " |")
+                for dr in data_rows:
+                    extracted_text.append("| " + " | ".join(dr) + " |")
+
+    return {
+        "extracted_text": extracted_text,
+        "extracted_images": extracted_images,
+        "page_images": page_images,
+        "blocks": blocks,
+        "tables": tables,
+    }
+
 # ── Extraction Endpoint ──────────────────────────────────────
 @app.post("/v1/vision/analyze")
 async def analyze_document(
@@ -217,65 +468,21 @@ async def analyze_document(
     ext = os.path.splitext(filename)[1].lower()
     contents = await file.read()
 
-    extracted_text: list[str] = []
-    extracted_images: list[dict] = []
-    page_images: list[str] = []
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
         tmp.write(contents)
         tmp_path = tmp.name
 
     try:
-        if ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"]:
-            img = Image.open(io.BytesIO(contents))
-            extracted_text = ocr_image_paddle(img, lang="en" if ocr_lang == "auto" else ocr_lang)
-            b64_img = base64.b64encode(contents).decode("utf-8")
-            mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
-            page_images.append(f"data:{mime};base64,{b64_img}")
-
-        elif ext == ".pdf":
-            doc = fitz.open(tmp_path)
-            for page_idx in range(len(doc)):
-                page = doc[page_idx]
-                pix = page.get_pixmap(dpi=150)
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                lines = ocr_image_paddle(img, lang="en" if ocr_lang == "auto" else ocr_lang)
-                if lines:
-                    extracted_text.append(f"--- Page {page_idx + 1} ---")
-                    extracted_text.extend(lines)
-                b64_page = base64.b64encode(pix.tobytes("png")).decode("utf-8")
-                page_images.append(f"data:image/png;base64,{b64_page}")
-            doc.close()
-
-        elif ext in [".pptx", ".ppt"]:
-            prs = Presentation(tmp_path)
-            for idx, slide in enumerate(prs.slides):
-                slide_lines = []
-                for shape in slide.shapes:
-                    if shape.has_text_frame:
-                        for paragraph in shape.text_frame.paragraphs:
-                            t = paragraph.text.strip()
-                            if t:
-                                slide_lines.append(t)
-                if slide_lines:
-                    extracted_text.append(f"Slide {idx + 1}")
-                    extracted_text.extend(slide_lines)
-            page_images = render_pptx_slides(tmp_path)
-
-        elif ext in [".docx", ".doc"]:
-            docx_doc = DocxDocument(tmp_path)
-            for para in docx_doc.paragraphs:
-                t = para.text.strip()
-                if t:
-                    extracted_text.append(t)
-
+        result = ocr_file_path_with_indra(tmp_path, ext=ext, ocr_lang=ocr_lang)
         return {
             "status": "success",
             "filename": filename,
             "payload": {
-                "extracted_text": extracted_text,
-                "extracted_images": extracted_images,
-                "page_images": page_images,
+                "extracted_text": result["extracted_text"],
+                "extracted_images": result.get("extracted_images", []),
+                "page_images": result.get("page_images", []),
+                "blocks": result.get("blocks", []),
+                "tables": result.get("tables", []),
             },
         }
 

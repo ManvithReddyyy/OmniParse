@@ -40,19 +40,8 @@ export default function UploadZone({ onFileSelect, compact, className = '' }: Up
 
   const processFile = (file: File) => {
     setSelectedFile(file);
-    setUploadState('uploading');
-    setProgress(25);
-
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 90) {
-          clearInterval(interval);
-          setUploadState('success');
-          return 100;
-        }
-        return prev + 25;
-      });
-    }, 200);
+    setProgress(100);
+    setUploadState('success');
   };
 
   const handleDrop = (e: DragEvent) => {

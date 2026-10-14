@@ -4,14 +4,16 @@ interface BadgeProps {
   status: 'completed' | 'processing' | 'pending' | 'error' | 'info';
   label?: string;
   className?: string;
+  dot?: boolean;
 }
 
-export default function Badge({ status, label, className = '' }: BadgeProps) {
+export default function Badge({ status, label, className = '', dot }: BadgeProps) {
   const displayLabel = label ?? status.charAt(0).toUpperCase() + status.slice(1);
+  const showDot = dot !== undefined ? dot : status !== 'completed';
 
   return (
     <span className={`${styles.badge} ${styles[status]} ${className}`}>
-      <span className={styles.dot} />
+      {showDot && <span className={styles.dot} />}
       {displayLabel}
     </span>
   );
