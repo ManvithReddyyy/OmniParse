@@ -11,6 +11,8 @@ import {
   generateMarkdownWithImages,
   generateJsonWithImages,
   generatePlainTextWithImages,
+  countExactTokens,
+  estimateRawDocumentTokens,
 } from '../utils/document-parser';
 
 export function generateUuid(): string {
@@ -72,7 +74,11 @@ export async function persistDocument(params: SaveDocumentParams): Promise<SaveD
   const markdownText = generateMarkdownWithImages(lines, backendImages, file.name);
   const jsonText = generateJsonWithImages(lines, backendImages, file.name, analysis.metadata);
   const plainText = generatePlainTextWithImages(lines, backendImages);
-  const approxTokens = Math.round(plainText.length / 4);
+
+  const plaintextTokens = countExactTokens(plainText);
+  const markdownTokens = countExactTokens(markdownText);
+  const jsonTokens = countExactTokens(jsonText);
+  const originalTokens = estimateRawDocumentTokens(file.size, Math.max(plaintextTokens, jsonTokens), fileExt);
 
   const document: Document = {
     id: docUuid,
@@ -89,10 +95,10 @@ export async function persistDocument(params: SaveDocumentParams): Promise<SaveD
     markdown: markdownText,
     json: jsonText,
     plaintext: plainText,
-    originalTokens: approxTokens * 2,
-    markdownTokens: Math.round(approxTokens * 0.75),
-    jsonTokens: Math.round(approxTokens * 1.25),
-    plaintextTokens: approxTokens,
+    originalTokens,
+    markdownTokens,
+    jsonTokens,
+    plaintextTokens,
   };
 
   const job: ProcessingJob = {
@@ -242,7 +248,12 @@ export async function fetchUserDocumentsFromCloud(userId: string): Promise<{
       const markdown = ocrRow?.markdown_output || (ocrRow?.extracted_text ? `## Extracted Content\n\n${ocrRow.extracted_text}` : `# ${row.filename}`);
       const jsonStr = ocrRow?.json_output ? JSON.stringify(ocrRow.json_output, null, 2) : JSON.stringify({ filename: row.filename }, null, 2);
       const plaintext = ocrRow?.extracted_text || textLines.join('\n');
-      const approxTokens = Math.round(plaintext.length / 4);
+
+      const plaintextTokens = countExactTokens(plaintext);
+      const markdownTokens = countExactTokens(markdown);
+      const jsonTokens = countExactTokens(jsonStr);
+      const fileExt = row.filename.split('.').pop()?.toLowerCase() || 'pdf';
+      const originalTokens = estimateRawDocumentTokens(row.file_size || 0, Math.max(plaintextTokens, jsonTokens), fileExt);
 
       // Dummy file object for analysis builder
       const dummyFile = new File([''], row.filename, { type: 'application/octet-stream' });
@@ -255,10 +266,10 @@ export async function fetchUserDocumentsFromCloud(userId: string): Promise<{
         markdown,
         json: jsonStr,
         plaintext,
-        originalTokens: approxTokens * 2,
-        markdownTokens: Math.round(approxTokens * 0.75),
-        jsonTokens: Math.round(approxTokens * 1.25),
-        plaintextTokens: approxTokens,
+        originalTokens,
+        markdownTokens,
+        jsonTokens,
+        plaintextTokens,
       };
 
       result.jobs.push({

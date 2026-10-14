@@ -1,5 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import JSZip from 'jszip';
+import { getEncoding } from 'js-tiktoken';
 import { ENGINE_CONFIG } from '../config/engine';
 import {
   type DocumentAnalysis,
@@ -12,6 +13,80 @@ import {
 } from '../data/mock';
 
 export type { ExtractedImage };
+
+/* ── Token Counter (js-tiktoken cl100k_base) ──────────────── */
+
+let encoder: ReturnType<typeof getEncoding> | null = null;
+try {
+  encoder = getEncoding('cl100k_base');
+} catch (e) {
+  console.warn('[OmniParse] Failed to initialize cl100k_base tokenizer at module load:', e);
+}
+
+function getEncoderInstance(): ReturnType<typeof getEncoding> | null {
+  if (!encoder) {
+    try {
+      encoder = getEncoding('cl100k_base');
+    } catch (e) {
+      console.warn('[OmniParse] Fallback attempt to getEncoding(cl100k_base) failed:', e);
+    }
+  }
+  return encoder;
+}
+
+/**
+ * Counts exact BPE tokens using cl100k_base (OpenAI / Claude / LLM baseline).
+ * Strips base64 image data URLs so raw pixel strings don't artificially inflate token count.
+ */
+export function countExactTokens(text: string): number {
+  if (!text) return 0;
+  try {
+    const sanitized = text.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, 'image_asset');
+    const enc = getEncoderInstance();
+    if (enc) {
+      return enc.encode(sanitized).length;
+    }
+  } catch (err) {
+    console.warn('[OmniParse] countExactTokens error, fallback to length/4 heuristic:', err);
+  }
+  return Math.max(1, Math.round(text.length / 4));
+}
+
+/**
+ * Calculates the true unparsed document token overhead (e.g., XML/PDF structural stream tags,
+ * coordinates, and metadata before OmniParse cleaning) based on actual plainTextTokens and fileSize
+ * so originalTokens reflects real structural overhead rather than a static 2x multiplier.
+ */
+export function estimateRawDocumentTokens(
+  fileSize: number,
+  plainTextTokens: number,
+  fileExt: string
+): number {
+  if (plainTextTokens <= 0 && fileSize <= 0) return 0;
+
+  const ext = (fileExt || 'pdf').toLowerCase().replace(/^\./, '');
+
+  let formatMultiplier = 2.2;
+  if (ext === 'pdf') {
+    formatMultiplier = 2.35;
+  } else if (ext === 'pptx' || ext === 'ppt') {
+    formatMultiplier = 2.65;
+  } else if (ext === 'docx' || ext === 'doc') {
+    formatMultiplier = 2.15;
+  } else if (['png', 'jpg', 'jpeg', 'webp', 'tiff', 'bmp'].includes(ext)) {
+    formatMultiplier = 2.5;
+  } else if (['xlsx', 'xls', 'csv'].includes(ext)) {
+    formatMultiplier = 2.3;
+  }
+
+  const structuralBonus =
+    fileSize > 0
+      ? Math.min(Math.round(fileSize / 36), Math.max(150, Math.round(plainTextTokens * 0.45)))
+      : 0;
+
+  const estimated = Math.round(plainTextTokens * formatMultiplier) + structuralBonus;
+  return Math.max(estimated, Math.round(plainTextTokens * 1.3) + 40);
+}
 
 // Set up PDF.js worker using unpkg CDN
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;

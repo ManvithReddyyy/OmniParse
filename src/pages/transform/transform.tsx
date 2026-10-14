@@ -7,6 +7,7 @@ import {
   generateMarkdownWithImages,
   generateJsonWithImages,
   generatePlainTextWithImages,
+  countExactTokens,
 } from '../../utils/document-parser';
 import Select from '../../components/ui/select';
 import Button from '../../components/ui/button';
@@ -71,14 +72,13 @@ export default function Transform() {
   };
 
   const getTokens = () => {
-    if (!transform) return 0;
-    if (format === 'markdown') return transform.markdownTokens;
-    if (format === 'json') return transform.jsonTokens;
-    return transform.plaintextTokens;
+    const text = getOutput();
+    if (!text) return 0;
+    return countExactTokens(text);
   };
 
   const savings = transform && transform.originalTokens > 0
-    ? Math.round(((transform.originalTokens - getTokens()) / transform.originalTokens) * 100)
+    ? Math.max(0, Math.round(((transform.originalTokens - getTokens()) / transform.originalTokens) * 100))
     : 0;
 
   const handleCopy = () => {
