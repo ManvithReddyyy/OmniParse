@@ -6,7 +6,6 @@ import {
   FileImage,
   FileType,
   Presentation,
-  ArrowRight,
   CheckCircle2,
   Trash2,
   Cloud,
@@ -141,17 +140,6 @@ export default function Dashboard() {
               </span>
             )}
           </p>
-        </div>
-
-        <div className={styles.quickActions}>
-          <Button variant="secondary" size="md" onClick={() => navigate('/transform')}>
-            <ArrowRight size={15} />
-            Transform
-          </Button>
-          <Button variant="primary" size="md" onClick={() => navigate('/analyze')}>
-            <Upload size={15} />
-            Upload Document
-          </Button>
         </div>
       </div>
 
