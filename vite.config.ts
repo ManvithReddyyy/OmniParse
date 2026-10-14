@@ -2,7 +2,6 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import busboy from 'busboy';
-import { Client } from '@gradio/client';
 
 function omniparseApiServerPlugin(): Plugin {
   return {
@@ -27,8 +26,8 @@ function omniparseApiServerPlugin(): Plugin {
           res.end(
             JSON.stringify({
               status: 'healthy',
-              engine: 'OmniParse Cloud Neural Engine (PaddleOCR v3.7 Core)',
-              version: '2.3.0',
+              engine: 'OmniParse Vision v3.0 (Indra OCR + PyMuPDF4LLM)',
+              version: '3.0.0',
               uptime: '99.98%',
             })
           );
@@ -93,16 +92,25 @@ function omniparseApiServerPlugin(): Plugin {
               }
 
               try {
-                const client = await Client.connect('ManvithReddy/omniparse-backend');
+                const formData = new FormData();
                 const blob = new Blob([fileBuffer], { type: mimeType });
-                const result = await client.predict('/gradio_ocr', {
-                  img: blob,
-                });
-                const raw = ((result.data as any)?.[0] as string) || '';
-                const lines = raw
-                  .split('\n')
-                  .map((l: string) => l.trim())
-                  .filter((l: string) => l.length > 0 && l !== '[No text detected in image]');
+                formData.append('file', blob, filename);
+                formData.append('ocr_lang', 'en');
+
+                const hfRes = await fetch(
+                  'https://manvithreddy-omniparse-backend.hf.space/v1/vision/analyze',
+                  {
+                    method: 'POST',
+                    body: formData,
+                  }
+                );
+
+                if (!hfRes.ok) {
+                  throw new Error(`HTTP error ${hfRes.status}: ${hfRes.statusText}`);
+                }
+
+                const data = (await hfRes.json()) as any;
+                const lines = data?.payload?.extracted_text || ['[No text detected]'];
 
                 res.statusCode = 200;
                 res.setHeader('Content-Type', 'application/json');
@@ -111,11 +119,14 @@ function omniparseApiServerPlugin(): Plugin {
                   JSON.stringify({
                     status: 'success',
                     code: 200,
-                    engine: 'OmniParse Vision Neural v2.3 (PaddleOCR 3.7 Core)',
+                    engine: 'OmniParse Vision v3.0 (Indra OCR + PyMuPDF4LLM)',
+                    latency_sec: data?.latency_sec,
                     filename,
                     payload: {
                       lines_count: lines.length,
-                      extracted_text: lines.length > 0 ? lines : [raw.trim() || '[No text detected in image]'],
+                      extracted_text: lines,
+                      blocks: data?.payload?.blocks || [],
+                      tables: data?.payload?.tables || [],
                     },
                   })
                 );

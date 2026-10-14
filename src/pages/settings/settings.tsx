@@ -77,17 +77,16 @@ export default function Settings() {
     setLatency(null);
     const start = Date.now();
     try {
-      const { Client } = await import('@gradio/client');
-      const client = await Client.connect(ENGINE_CONFIG.spaceTarget);
-      if (client) {
-        const ms = Date.now() - start;
+      const res = await fetch('https://manvithreddy-omniparse-backend.hf.space/health');
+      const ms = Date.now() - start;
+      if (res.ok) {
         setApiStatus('connected');
         setLatency(ms);
         addToast(`Connected to OmniParse Engine (${ms}ms)`, 'success');
         return;
       }
       setApiStatus('error');
-      addToast('Could not reach engine endpoint', 'error');
+      addToast(`Engine connection returned HTTP ${res.status}`, 'error');
     } catch {
       setApiStatus('error');
       addToast('Engine connection timed out or unreachable', 'error');
